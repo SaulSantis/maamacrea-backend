@@ -29,6 +29,9 @@ public class Insumo {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "codigo_producto", nullable = false, length = 80)
+    private String codigoProducto;
+
     @Column(nullable = false, length = 120)
     private String nombre;
 
@@ -41,6 +44,18 @@ public class Insumo {
     @Column(name = "cantidad_comprada", nullable = false, precision = 12, scale = 3)
     private BigDecimal cantidadComprada;
 
+    @Column(precision = 12, scale = 3)
+    private BigDecimal ancho;
+
+    @Column(precision = 12, scale = 3)
+    private BigDecimal alto;
+
+    @Column(name = "precio_neto", precision = 12, scale = 2)
+    private BigDecimal precioNeto;
+
+    @Column(precision = 12, scale = 2)
+    private BigDecimal iva;
+
     @Column(name = "precio_compra_total", nullable = false, precision = 12, scale = 2)
     private BigDecimal precioCompraTotal;
 
@@ -52,6 +67,15 @@ public class Insumo {
 
     @Column(name = "fecha_compra")
     private LocalDate fechaCompra;
+
+    @Column(name = "tipo_documento", length = 40)
+    private String tipoDocumento;
+
+    @Column(name = "numero_documento", length = 80)
+    private String numeroDocumento;
+
+    @Column(name = "documento_url", length = 500)
+    private String documentoUrl;
 
     @Column(columnDefinition = "TEXT")
     private String notas;
