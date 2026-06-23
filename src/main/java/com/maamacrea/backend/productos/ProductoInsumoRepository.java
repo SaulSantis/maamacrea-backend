@@ -6,4 +6,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface ProductoInsumoRepository extends JpaRepository<ProductoInsumo, Long> {
 
     List<ProductoInsumo> findByProductoId(Long productoId);
+
+    List<ProductoInsumo> findByProductoIdOrderByIdAsc(Long productoId);
+
+    void deleteByProductoId(Long productoId);
 }
