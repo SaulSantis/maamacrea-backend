@@ -2,10 +2,17 @@ package com.maamacrea.backend.productos;
 
 import com.maamacrea.backend.ResourceNotFoundException;
 import com.maamacrea.backend.insumos.Insumo;
+import com.maamacrea.backend.insumos.InsumoCompra;
+import com.maamacrea.backend.insumos.InsumoCompraRepository;
 import com.maamacrea.backend.insumos.InsumoRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,14 +24,17 @@ public class ProductoService {
     private final ProductoRepository productoRepository;
     private final ProductoInsumoRepository productoInsumoRepository;
     private final InsumoRepository insumoRepository;
+    private final InsumoCompraRepository insumoCompraRepository;
 
     public ProductoService(
             ProductoRepository productoRepository,
             ProductoInsumoRepository productoInsumoRepository,
-            InsumoRepository insumoRepository) {
+            InsumoRepository insumoRepository,
+            InsumoCompraRepository insumoCompraRepository) {
         this.productoRepository = productoRepository;
         this.productoInsumoRepository = productoInsumoRepository;
         this.insumoRepository = insumoRepository;
+        this.insumoCompraRepository = insumoCompraRepository;
     }
 
     @Transactional(readOnly = true)
@@ -158,18 +168,26 @@ public class ProductoService {
     }
 
     private BigDecimal calcularCostoRelacion(ProductoInsumo productoInsumo) {
+        Insumo insumo = productoInsumo.getInsumo();
+        Optional<InsumoCompra> compraVigente = obtenerCompraVigente(insumo.getId());
+        if (compraVigente.isPresent()) {
+            BigDecimal costoDesdeCompra = calcularCostoDesdeCompraVigente(productoInsumo, compraVigente.get());
+            if (costoDesdeCompra != null) {
+                return costoDesdeCompra.setScale(4, RoundingMode.HALF_UP);
+            }
+        }
+
         if (productoInsumo.getCostoEstimado() != null) {
             return productoInsumo.getCostoEstimado().setScale(4, RoundingMode.HALF_UP);
         }
 
-        Insumo insumo = productoInsumo.getInsumo();
         BigDecimal costoUnitario = valorOZero(insumo.getCostoUnitario());
         BigDecimal cantidadUsada = valorOZero(productoInsumo.getCantidadUsada());
 
         if (costoUnitario.compareTo(BigDecimal.ZERO) == 0) {
             BigDecimal precioCompra = valorOZero(insumo.getPrecioCompra());
             BigDecimal cantidadComprada = valorOZero(insumo.getCantidadComprada());
-            if (cantidadComprada.compareTo(BigDecimal.ZERO) == 0) {
+            if (cantidadComprada.compareTo(BigDecimal.ZERO) == 0 || precioCompra.compareTo(BigDecimal.ZERO) <= 0) {
                 return BigDecimal.ZERO;
             }
             costoUnitario = precioCompra.divide(cantidadComprada, 8, RoundingMode.HALF_UP);
@@ -178,11 +196,48 @@ public class ProductoService {
         return costoUnitario.multiply(cantidadUsada);
     }
 
+    private BigDecimal calcularCostoDesdeCompraVigente(ProductoInsumo productoInsumo, InsumoCompra compraVigente) {
+        BigDecimal precioCompraTotal = valorOZero(compraVigente.getPrecioCompraTotal());
+        if (precioCompraTotal.compareTo(BigDecimal.ZERO) <= 0) {
+            return null;
+        }
+
+        BigDecimal cantidadUsada = valorOZero(productoInsumo.getCantidadUsada());
+        BigDecimal anchoCompra = compraVigente.getAncho();
+        BigDecimal altoCompra = compraVigente.getAlto();
+        BigDecimal anchoUsado = productoInsumo.getAnchoUsadoCm();
+        BigDecimal altoUsado = productoInsumo.getAltoLargoUsadoCm();
+
+        if (anchoCompra != null && altoCompra != null && anchoUsado != null && altoUsado != null) {
+            BigDecimal areaTotalComprada = anchoCompra.multiply(altoCompra);
+            if (areaTotalComprada.compareTo(BigDecimal.ZERO) > 0) {
+                BigDecimal costoPorCm2 = precioCompraTotal.divide(areaTotalComprada, 8, RoundingMode.HALF_UP);
+                BigDecimal areaUsada = anchoUsado.multiply(altoUsado).multiply(cantidadUsada);
+                return costoPorCm2.multiply(areaUsada);
+            }
+        }
+
+        BigDecimal precioUnitario = valorOZero(compraVigente.getPrecioUnitario());
+        if (precioUnitario.compareTo(BigDecimal.ZERO) == 0) {
+            BigDecimal cantidadComprada = valorOZero(compraVigente.getCantidadComprada());
+            if (cantidadComprada.compareTo(BigDecimal.ZERO) == 0) {
+                return null;
+            }
+            precioUnitario = precioCompraTotal.divide(cantidadComprada, 8, RoundingMode.HALF_UP);
+        }
+
+        return precioUnitario.multiply(cantidadUsada);
+    }
+
     private ProductoResponse toProductoResponse(Producto producto) {
-        List<ProductoInsumoResponse> insumos = productoInsumoRepository.findByProductoIdOrderByIdAsc(producto.getId())
-                .stream()
-                .map(this::toProductoInsumoResponse)
-                .toList();
+        List<ProductoInsumo> relaciones = productoInsumoRepository.findByProductoIdOrderByIdAsc(producto.getId());
+        List<ProductoInsumoResponse> insumos = relaciones.stream().map(this::toProductoInsumoResponse).toList();
+        List<ProductoCambioPrecioResponse> cambiosPrecio = construirCambiosPrecio(relaciones);
+        LocalDate ultimoCambioPrecio = cambiosPrecio.stream()
+                .map(ProductoCambioPrecioResponse::ultimoCambioPrecio)
+                .filter(Objects::nonNull)
+                .max(LocalDate::compareTo)
+                .orElse(null);
 
         return new ProductoResponse(
                 producto.getId(),
@@ -194,7 +249,64 @@ public class ProductoService {
                 producto.getCostoMateriales(),
                 producto.getPrecioSugerido(),
                 producto.getGanancia(),
+                ultimoCambioPrecio,
+                !cambiosPrecio.isEmpty(),
+                cambiosPrecio,
                 insumos);
+    }
+
+    private List<ProductoCambioPrecioResponse> construirCambiosPrecio(List<ProductoInsumo> relaciones) {
+        Map<Long, ProductoCambioPrecioResponse> cambiosPorInsumo = new LinkedHashMap<>();
+
+        for (ProductoInsumo relacion : relaciones) {
+            Insumo insumo = relacion.getInsumo();
+            if (cambiosPorInsumo.containsKey(insumo.getId())) {
+                continue;
+            }
+
+            List<InsumoCompra> compras = insumoCompraRepository.findByInsumoIdOrderByFechaCompraDescCreatedAtDescIdDesc(insumo.getId());
+            if (compras == null || compras.size() < 2) {
+                continue;
+            }
+
+            InsumoCompra vigente = obtenerCompraVigente(insumo.getId()).orElse(compras.get(0));
+            InsumoCompra anterior = compras.stream()
+                    .filter(compra -> !Objects.equals(compra.getId(), vigente.getId()))
+                    .findFirst()
+                    .orElse(null);
+
+            if (anterior == null || sameBigDecimal(vigente.getPrecioCompraTotal(), anterior.getPrecioCompraTotal())) {
+                continue;
+            }
+
+            cambiosPorInsumo.put(
+                    insumo.getId(),
+                    new ProductoCambioPrecioResponse(
+                            insumo.getId(),
+                            insumo.getCodigoProducto(),
+                            insumo.getNombre(),
+                            vigente.getFechaCompra(),
+                            anterior.getPrecioCompraTotal(),
+                            vigente.getPrecioCompraTotal(),
+                            calcularVariacionPorcentual(
+                                    anterior.getPrecioCompraTotal(), vigente.getPrecioCompraTotal())));
+        }
+
+        return cambiosPorInsumo.values().stream()
+                .sorted((left, right) -> right.ultimoCambioPrecio().compareTo(left.ultimoCambioPrecio()))
+                .toList();
+    }
+
+    private Optional<InsumoCompra> obtenerCompraVigente(Long insumoId) {
+        Optional<InsumoCompra> vigente =
+                insumoCompraRepository.findFirstByInsumoIdAndVigenteTrueOrderByFechaCompraDescCreatedAtDescIdDesc(insumoId);
+        if (vigente != null && vigente.isPresent()) {
+            return vigente;
+        }
+
+        Optional<InsumoCompra> ultima =
+                insumoCompraRepository.findFirstByInsumoIdOrderByFechaCompraDescCreatedAtDescIdDesc(insumoId);
+        return ultima == null ? Optional.empty() : ultima;
     }
 
     private ProductoInsumoResponse toProductoInsumoResponse(ProductoInsumo productoInsumo) {
@@ -272,6 +384,26 @@ public class ProductoService {
     private Insumo obtenerInsumo(Long insumoId) {
         return insumoRepository.findById(insumoId)
                 .orElseThrow(() -> new ResourceNotFoundException("Insumo no encontrado: " + insumoId));
+    }
+
+    private BigDecimal calcularVariacionPorcentual(BigDecimal precioAnterior, BigDecimal precioActual) {
+        if (precioAnterior == null || precioActual == null || precioAnterior.compareTo(BigDecimal.ZERO) == 0) {
+            return null;
+        }
+
+        return precioActual.subtract(precioAnterior)
+                .multiply(new BigDecimal("100"))
+                .divide(precioAnterior, 2, RoundingMode.HALF_UP);
+    }
+
+    private boolean sameBigDecimal(BigDecimal left, BigDecimal right) {
+        if (left == null && right == null) {
+            return true;
+        }
+        if (left == null || right == null) {
+            return false;
+        }
+        return left.compareTo(right) == 0;
     }
 
     private void validarMedidaPositiva(BigDecimal value, String message) {

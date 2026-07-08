@@ -9,8 +9,11 @@ import static org.mockito.Mockito.when;
 
 import com.maamacrea.backend.ResourceNotFoundException;
 import com.maamacrea.backend.insumos.Insumo;
+import com.maamacrea.backend.insumos.InsumoCompra;
+import com.maamacrea.backend.insumos.InsumoCompraRepository;
 import com.maamacrea.backend.insumos.InsumoRepository;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,6 +35,9 @@ class ProductoServiceTest {
 
     @Mock
     private InsumoRepository insumoRepository;
+
+    @Mock
+    private InsumoCompraRepository insumoCompraRepository;
 
     @InjectMocks
     private ProductoService productoService;
@@ -143,6 +149,42 @@ class ProductoServiceTest {
         assertThat(response.insumos().get(1).medidaUsadaTexto()).isEqualTo("43 x 31 cm");
         assertThat(response.insumos().get(2).medidaUsadaTexto()).isEqualTo("No aplica");
         verify(productoInsumoRepository, times(3)).save(any(ProductoInsumo.class));
+    }
+
+    @Test
+    void calculaCostoTextilUsandoCompraVigentePorArea() {
+        Producto productoGuardado = productoPersistido(1L, "COJ-PERS-001", "Cojin 43x43");
+        ProductoInsumo relacionGuardada = relacionPersistida(
+                10L, productoGuardado, insumoTextil, "1.0000", "43.000", "43.000", "No aplica");
+        InsumoCompra compraVigente = compraPersistida(insumoTextil, "150.000", "100.000", "5000.00");
+
+        when(productoRepository.existsByCodigoIgnoreCase("COJ-PERS-001")).thenReturn(false);
+        when(productoRepository.save(any(Producto.class))).thenAnswer(invocation -> {
+            Producto producto = invocation.getArgument(0);
+            if (producto.getId() == null) {
+                producto.setId(1L);
+            }
+            return producto;
+        });
+        when(insumoRepository.findById(1L)).thenReturn(Optional.of(insumoTextil));
+        when(productoInsumoRepository.save(any(ProductoInsumo.class))).thenReturn(relacionGuardada);
+        when(productoInsumoRepository.findByProductoIdOrderByIdAsc(1L)).thenReturn(List.of(relacionGuardada));
+        when(insumoCompraRepository.findFirstByInsumoIdAndVigenteTrueOrderByFechaCompraDescCreatedAtDescIdDesc(1L))
+                .thenReturn(Optional.of(compraVigente));
+
+        ProductoResponse response = productoService.crearProducto(new ProductoCreateRequest(
+                "COJ-PERS-001",
+                "Cojin 43x43",
+                ProductoTipo.COJIN_PERSONALIZADO,
+                List.of(new ProductoInsumoCreateRequest(
+                        1L,
+                        new BigDecimal("1"),
+                        new BigDecimal("43"),
+                        new BigDecimal("43"),
+                        "No aplica",
+                        null))));
+
+        assertThat(response.costoMateriales()).isEqualByComparingTo("616.3333");
     }
 
     @Test
@@ -258,5 +300,20 @@ class ProductoServiceTest {
         productoInsumo.setAltoLargoUsadoCm(altoLargoUsadoCm == null ? null : new BigDecimal(altoLargoUsadoCm));
         productoInsumo.setConsumo(consumo);
         return productoInsumo;
+    }
+
+    private InsumoCompra compraPersistida(Insumo insumo, String ancho, String alto, String precioCompraTotal) {
+        InsumoCompra compra = new InsumoCompra();
+        compra.setId(20L);
+        compra.setInsumo(insumo);
+        compra.setFechaCompra(LocalDate.of(2026, 7, 8));
+        compra.setCantidadComprada(new BigDecimal("1.000"));
+        compra.setUnidadMedida("rollo");
+        compra.setAncho(new BigDecimal(ancho));
+        compra.setAlto(new BigDecimal(alto));
+        compra.setPrecioCompraTotal(new BigDecimal(precioCompraTotal));
+        compra.setPrecioUnitario(new BigDecimal(precioCompraTotal));
+        compra.setVigente(true);
+        return compra;
     }
 }

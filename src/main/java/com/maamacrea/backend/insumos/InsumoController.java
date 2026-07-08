@@ -38,10 +38,27 @@ public class InsumoController {
         return ResponseEntity.ok(insumoService.buscarPorId(id));
     }
 
+    @GetMapping("/{id}/compras")
+    public ResponseEntity<List<InsumoCompraResponse>> listarCompras(@PathVariable Long id) {
+        return ResponseEntity.ok(insumoService.listarCompras(id));
+    }
+
+    @GetMapping("/{id}/precio-vigente")
+    public ResponseEntity<InsumoCompraResponse> obtenerPrecioVigente(@PathVariable Long id) {
+        return ResponseEntity.ok(insumoService.obtenerPrecioVigente(id));
+    }
+
     @PostMapping
     public ResponseEntity<InsumoResponse> crear(@Valid @RequestBody InsumoRequest insumoRequest) {
         InsumoResponse creado = insumoService.crear(insumoRequest);
         return ResponseEntity.status(HttpStatus.CREATED).body(creado);
+    }
+
+    @PostMapping("/{id}/compras")
+    public ResponseEntity<InsumoCompraResponse> registrarCompra(
+            @PathVariable Long id, @Valid @RequestBody InsumoCompraRequest compraRequest) {
+        InsumoCompraResponse creada = insumoService.registrarCompra(id, compraRequest);
+        return ResponseEntity.status(HttpStatus.CREATED).body(creada);
     }
 
     @PostMapping(path = "/{id}/documento", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

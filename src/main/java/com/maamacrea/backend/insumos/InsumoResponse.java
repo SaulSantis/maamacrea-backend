@@ -24,5 +24,11 @@ public record InsumoResponse(
         String numeroDocumento,
         String documentoUrl,
         String notas,
+        Long compraVigenteId,
+        long totalCompras,
+        boolean tieneCambioPrecio,
+        LocalDate ultimoCambioPrecio,
+        BigDecimal precioCompraAnterior,
+        BigDecimal variacionPrecioPorcentual,
         LocalDateTime createdAt,
         LocalDateTime updatedAt) {}
