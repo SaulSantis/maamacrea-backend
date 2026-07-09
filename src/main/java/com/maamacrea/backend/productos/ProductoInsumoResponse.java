@@ -16,4 +16,5 @@ public record ProductoInsumoResponse(
         String medidaUsadaTexto,
         String consumo,
         BigDecimal costoEstimado,
+        String mensajeCosto,
         LocalDateTime fechaRegistro) {}

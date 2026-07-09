@@ -51,11 +51,13 @@ class ProductoServiceTest {
         insumoTextil.setId(1L);
         insumoTextil.setCodigoProducto("TEL-BIS-001");
         insumoTextil.setNombre("Tela Bistrech Blanca");
-        insumoTextil.setCategoria("MATERIALES_TEXTILES");
-        insumoTextil.setUnidadMedida("metro");
-        insumoTextil.setCantidadComprada(new BigDecimal("10"));
-        insumoTextil.setPrecioCompraTotal(new BigDecimal("5000"));
-        insumoTextil.setCostoUnitario(new BigDecimal("500.0000"));
+        insumoTextil.setCategoria("Materiales textiles");
+        insumoTextil.setUnidadMedida("rollo");
+        insumoTextil.setCantidadComprada(new BigDecimal("1"));
+        insumoTextil.setAncho(new BigDecimal("1.5"));
+        insumoTextil.setAlto(new BigDecimal("50"));
+        insumoTextil.setPrecioCompraTotal(new BigDecimal("40460"));
+        insumoTextil.setCostoUnitario(new BigDecimal("40460.0000"));
 
         insumoSublimacion = new Insumo();
         insumoSublimacion.setId(3L);
@@ -156,7 +158,7 @@ class ProductoServiceTest {
         Producto productoGuardado = productoPersistido(1L, "COJ-PERS-001", "Cojin 43x43");
         ProductoInsumo relacionGuardada = relacionPersistida(
                 10L, productoGuardado, insumoTextil, "1.0000", "43.000", "43.000", "No aplica");
-        InsumoCompra compraVigente = compraPersistida(insumoTextil, "150.000", "100.000", "5000.00");
+        InsumoCompra compraVigente = compraPersistida(insumoTextil, "1.500", "50.000", "40460.00");
 
         when(productoRepository.existsByCodigoIgnoreCase("COJ-PERS-001")).thenReturn(false);
         when(productoRepository.save(any(Producto.class))).thenAnswer(invocation -> {
@@ -184,7 +186,90 @@ class ProductoServiceTest {
                         "No aplica",
                         null))));
 
-        assertThat(response.costoMateriales()).isEqualByComparingTo("616.3333");
+        assertThat(response.costoMateriales()).isEqualByComparingTo("99.7474");
+        assertThat(response.precioSugerido()).isEqualByComparingTo("199.49");
+        assertThat(response.ganancia()).isEqualByComparingTo("99.74");
+        assertThat(response.costeoCompleto()).isTrue();
+        assertThat(response.advertenciasCosteo()).isEmpty();
+        assertThat(response.insumos().get(0).costoEstimado()).isEqualByComparingTo("99.7474");
+        assertThat(response.insumos().get(0).mensajeCosto()).isNull();
+    }
+
+    @Test
+    void calculaCostoTextilConCantidadDosYOtraMedida() {
+        Producto productoGuardado = productoPersistido(1L, "COJ-PERS-002", "Cojin 31x43");
+        ProductoInsumo relacionGuardada = relacionPersistida(
+                10L, productoGuardado, insumoTextil, "2.0000", "31.000", "43.000", "No aplica");
+        InsumoCompra compraVigente = compraPersistida(insumoTextil, "1.500", "50.000", "40460.00");
+
+        when(productoRepository.existsByCodigoIgnoreCase("COJ-PERS-002")).thenReturn(false);
+        when(productoRepository.save(any(Producto.class))).thenAnswer(invocation -> {
+            Producto producto = invocation.getArgument(0);
+            if (producto.getId() == null) {
+                producto.setId(1L);
+            }
+            return producto;
+        });
+        when(insumoRepository.findById(1L)).thenReturn(Optional.of(insumoTextil));
+        when(productoInsumoRepository.save(any(ProductoInsumo.class))).thenReturn(relacionGuardada);
+        when(productoInsumoRepository.findByProductoIdOrderByIdAsc(1L)).thenReturn(List.of(relacionGuardada));
+        when(insumoCompraRepository.findFirstByInsumoIdAndVigenteTrueOrderByFechaCompraDescCreatedAtDescIdDesc(1L))
+                .thenReturn(Optional.of(compraVigente));
+
+        ProductoResponse response = productoService.crearProducto(new ProductoCreateRequest(
+                "COJ-PERS-002",
+                "Cojin 31x43",
+                ProductoTipo.COJIN_PERSONALIZADO,
+                List.of(new ProductoInsumoCreateRequest(
+                        1L,
+                        new BigDecimal("2"),
+                        new BigDecimal("31"),
+                        new BigDecimal("43"),
+                        "No aplica",
+                        null))));
+
+        assertThat(response.costoMateriales()).isEqualByComparingTo("143.8218");
+        assertThat(response.insumos().get(0).costoEstimado()).isEqualByComparingTo("143.8218");
+    }
+
+    @Test
+    void informaAdvertenciaCuandoFaltanMedidasDeCompraParaCosteoPorArea() {
+        Producto productoGuardado = productoPersistido(1L, "COJ-PERS-003", "Cojin sin largo");
+        ProductoInsumo relacionGuardada = relacionPersistida(
+                10L, productoGuardado, insumoTextil, "1.0000", "43.000", "43.000", "No aplica");
+        InsumoCompra compraVigente = compraPersistida(insumoTextil, "1.500", null, "40460.00");
+        insumoTextil.setAlto(null);
+
+        when(productoRepository.existsByCodigoIgnoreCase("COJ-PERS-003")).thenReturn(false);
+        when(productoRepository.save(any(Producto.class))).thenAnswer(invocation -> {
+            Producto producto = invocation.getArgument(0);
+            if (producto.getId() == null) {
+                producto.setId(1L);
+            }
+            return producto;
+        });
+        when(insumoRepository.findById(1L)).thenReturn(Optional.of(insumoTextil));
+        when(productoInsumoRepository.save(any(ProductoInsumo.class))).thenReturn(relacionGuardada);
+        when(productoInsumoRepository.findByProductoIdOrderByIdAsc(1L)).thenReturn(List.of(relacionGuardada));
+        when(insumoCompraRepository.findFirstByInsumoIdAndVigenteTrueOrderByFechaCompraDescCreatedAtDescIdDesc(1L))
+                .thenReturn(Optional.of(compraVigente));
+
+        ProductoResponse response = productoService.crearProducto(new ProductoCreateRequest(
+                "COJ-PERS-003",
+                "Cojin sin largo",
+                ProductoTipo.COJIN_PERSONALIZADO,
+                List.of(new ProductoInsumoCreateRequest(
+                        1L,
+                        new BigDecimal("1"),
+                        new BigDecimal("43"),
+                        new BigDecimal("43"),
+                        "No aplica",
+                        null))));
+
+        assertThat(response.costeoCompleto()).isFalse();
+        assertThat(response.advertenciasCosteo()).contains("Tela Bistrech Blanca no tiene largo de compra.");
+        assertThat(response.insumos().get(0).costoEstimado()).isNull();
+        assertThat(response.insumos().get(0).mensajeCosto()).isEqualTo("Tela Bistrech Blanca no tiene largo de compra.");
     }
 
     @Test
@@ -309,8 +394,8 @@ class ProductoServiceTest {
         compra.setFechaCompra(LocalDate.of(2026, 7, 8));
         compra.setCantidadComprada(new BigDecimal("1.000"));
         compra.setUnidadMedida("rollo");
-        compra.setAncho(new BigDecimal(ancho));
-        compra.setAlto(new BigDecimal(alto));
+        compra.setAncho(ancho == null ? null : new BigDecimal(ancho));
+        compra.setAlto(alto == null ? null : new BigDecimal(alto));
         compra.setPrecioCompraTotal(new BigDecimal(precioCompraTotal));
         compra.setPrecioUnitario(new BigDecimal(precioCompraTotal));
         compra.setVigente(true);

@@ -17,5 +17,7 @@ public record ProductoResponse(
         BigDecimal ganancia,
         LocalDate ultimoCambioPrecioInsumos,
         boolean tieneCambiosPrecio,
+        boolean costeoCompleto,
+        List<String> advertenciasCosteo,
         List<ProductoCambioPrecioResponse> cambiosPrecioInsumos,
         List<ProductoInsumoResponse> insumos) {}
