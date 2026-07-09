@@ -44,6 +44,7 @@ class ProductoServiceTest {
 
     private Insumo insumoTextil;
     private Insumo insumoSublimacion;
+    private Insumo insumoTinta;
 
     @BeforeEach
     void setUp() {
@@ -68,6 +69,17 @@ class ProductoServiceTest {
         insumoSublimacion.setCantidadComprada(new BigDecimal("50"));
         insumoSublimacion.setPrecioCompraTotal(new BigDecimal("10000"));
         insumoSublimacion.setCostoUnitario(new BigDecimal("200.0000"));
+
+        insumoTinta = new Insumo();
+        insumoTinta.setId(4L);
+        insumoTinta.setCodigoProducto("T49M1");
+        insumoTinta.setNombre("Tinta Negra Sublimacion Epson");
+        insumoTinta.setCategoria("SUBLIMACION");
+        insumoTinta.setUnidadMedida("ml");
+        insumoTinta.setCantidadComprada(new BigDecimal("1"));
+        insumoTinta.setCantidadMlComprados(new BigDecimal("140"));
+        insumoTinta.setPrecioCompraTotal(new BigDecimal("19990"));
+        insumoTinta.setCostoUnitario(new BigDecimal("142.7857"));
     }
 
     @Test
@@ -270,6 +282,90 @@ class ProductoServiceTest {
         assertThat(response.advertenciasCosteo()).contains("Tela Bistrech Blanca no tiene largo de compra.");
         assertThat(response.insumos().get(0).costoEstimado()).isNull();
         assertThat(response.insumos().get(0).mensajeCosto()).isEqualTo("Tela Bistrech Blanca no tiene largo de compra.");
+    }
+
+    @Test
+    void calculaCostoTintaUsandoCantidadMlCompradosYCantidadUsadaManual() {
+        Producto productoGuardado = productoPersistido(1L, "COJ-PERS-004", "Cojin sublimado");
+        ProductoInsumo relacionGuardada = relacionPersistida(
+                10L, productoGuardado, insumoTinta, "0.8825", null, null, "0.8825 ML");
+        InsumoCompra compraVigente = compraPersistida(insumoTinta, null, null, "19990.00");
+        compraVigente.setUnidadMedida("ml");
+        compraVigente.setCantidadComprada(new BigDecimal("1.000"));
+        compraVigente.setCantidadMlComprados(new BigDecimal("140.0000"));
+        compraVigente.setPrecioUnitario(new BigDecimal("142.7857"));
+
+        when(productoRepository.existsByCodigoIgnoreCase("COJ-PERS-004")).thenReturn(false);
+        when(productoRepository.save(any(Producto.class))).thenAnswer(invocation -> {
+            Producto producto = invocation.getArgument(0);
+            if (producto.getId() == null) {
+                producto.setId(1L);
+            }
+            return producto;
+        });
+        when(insumoRepository.findById(4L)).thenReturn(Optional.of(insumoTinta));
+        when(productoInsumoRepository.save(any(ProductoInsumo.class))).thenReturn(relacionGuardada);
+        when(productoInsumoRepository.findByProductoIdOrderByIdAsc(1L)).thenReturn(List.of(relacionGuardada));
+        when(insumoCompraRepository.findFirstByInsumoIdAndVigenteTrueOrderByFechaCompraDescCreatedAtDescIdDesc(4L))
+                .thenReturn(Optional.of(compraVigente));
+
+        ProductoResponse response = productoService.crearProducto(new ProductoCreateRequest(
+                "COJ-PERS-004",
+                "Cojin sublimado",
+                ProductoTipo.COJIN_PERSONALIZADO,
+                List.of(new ProductoInsumoCreateRequest(
+                        4L,
+                        new BigDecimal("0.8825"),
+                        null,
+                        null,
+                        "0.8825 ML",
+                        null))));
+
+        assertThat(response.costoMateriales()).isEqualByComparingTo("126.0084");
+        assertThat(response.insumos().get(0).costoEstimado()).isEqualByComparingTo("126.0084");
+    }
+
+    @Test
+    void informaAdvertenciaCuandoTintaNoTieneCantidadMlComprados() {
+        Producto productoGuardado = productoPersistido(1L, "COJ-PERS-005", "Cojin sublimado");
+        ProductoInsumo relacionGuardada = relacionPersistida(
+                10L, productoGuardado, insumoTinta, "0.8825", null, null, "0.8825 ML");
+        InsumoCompra compraVigente = compraPersistida(insumoTinta, null, null, "19990.00");
+        compraVigente.setUnidadMedida("ml");
+        compraVigente.setCantidadComprada(new BigDecimal("1.000"));
+        compraVigente.setCantidadMlComprados(null);
+        compraVigente.setPrecioUnitario(new BigDecimal("19990.0000"));
+        insumoTinta.setCantidadMlComprados(null);
+
+        when(productoRepository.existsByCodigoIgnoreCase("COJ-PERS-005")).thenReturn(false);
+        when(productoRepository.save(any(Producto.class))).thenAnswer(invocation -> {
+            Producto producto = invocation.getArgument(0);
+            if (producto.getId() == null) {
+                producto.setId(1L);
+            }
+            return producto;
+        });
+        when(insumoRepository.findById(4L)).thenReturn(Optional.of(insumoTinta));
+        when(productoInsumoRepository.save(any(ProductoInsumo.class))).thenReturn(relacionGuardada);
+        when(productoInsumoRepository.findByProductoIdOrderByIdAsc(1L)).thenReturn(List.of(relacionGuardada));
+        when(insumoCompraRepository.findFirstByInsumoIdAndVigenteTrueOrderByFechaCompraDescCreatedAtDescIdDesc(4L))
+                .thenReturn(Optional.of(compraVigente));
+
+        ProductoResponse response = productoService.crearProducto(new ProductoCreateRequest(
+                "COJ-PERS-005",
+                "Cojin sublimado",
+                ProductoTipo.COJIN_PERSONALIZADO,
+                List.of(new ProductoInsumoCreateRequest(
+                        4L,
+                        new BigDecimal("0.8825"),
+                        null,
+                        null,
+                        "0.8825 ML",
+                        null))));
+
+        assertThat(response.costeoCompleto()).isFalse();
+        assertThat(response.advertenciasCosteo()).contains("Faltan ML comprados para calcular tinta en Tinta Negra Sublimacion Epson.");
+        assertThat(response.insumos().get(0).costoEstimado()).isNull();
     }
 
     @Test

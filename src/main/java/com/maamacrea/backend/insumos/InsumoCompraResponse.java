@@ -9,6 +9,7 @@ public record InsumoCompraResponse(
         Long insumoId,
         LocalDate fechaCompra,
         BigDecimal cantidadComprada,
+        BigDecimal cantidadMlComprados,
         String unidadMedida,
         BigDecimal precioCompraTotal,
         BigDecimal precioUnitario,

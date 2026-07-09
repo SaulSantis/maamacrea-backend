@@ -25,7 +25,8 @@ public class ProductoService {
     private static final BigDecimal CIEN = new BigDecimal("100");
     private static final BigDecimal MARGEN_VENTA_DEFECTO = new BigDecimal("0.50");
     private static final BigDecimal FACTOR_METROS_A_CENTIMETROS = new BigDecimal("100");
-    private static final BigDecimal AREA_BASE_TINTA_CM2 = new BigDecimal("1849");
+    private static final BigDecimal CENTIMETROS_CUADRADOS_POR_METRO_CUADRADO = new BigDecimal("10000");
+    private static final BigDecimal CONSUMO_TINTA_ML_POR_M2 = new BigDecimal("20");
     private static final Pattern DECIMAL_PATTERN = Pattern.compile("(\\d+(?:[.,]\\d+)?)");
 
     private final ProductoRepository productoRepository;
@@ -177,9 +178,10 @@ public class ProductoService {
         Map<Long, CosteoDetalleResultado> resultadosPorRelacion = new LinkedHashMap<>();
         List<String> advertencias = new ArrayList<>();
         BigDecimal costoMateriales = BigDecimal.ZERO;
+        TintaContext tintaContext = construirTintaContext(relaciones);
 
         for (ProductoInsumo relacion : relaciones) {
-            CosteoDetalleResultado detalle = calcularDetalleRelacion(relacion);
+            CosteoDetalleResultado detalle = calcularDetalleRelacion(relacion, tintaContext);
             resultadosPorRelacion.put(relacion.getId(), detalle);
 
             if (detalle.costoEstimado() != null) {
@@ -206,11 +208,15 @@ public class ProductoService {
     }
 
     private CosteoDetalleResultado calcularDetalleRelacion(ProductoInsumo productoInsumo) {
+        return calcularDetalleRelacion(productoInsumo, construirTintaContext(List.of(productoInsumo)));
+    }
+
+    private CosteoDetalleResultado calcularDetalleRelacion(ProductoInsumo productoInsumo, TintaContext tintaContext) {
         Insumo insumo = productoInsumo.getInsumo();
         Optional<InsumoCompra> compraVigente = obtenerCompraVigente(insumo.getId());
 
         if (esInsumoTinta(insumo)) {
-            return calcularCostoTinta(productoInsumo, compraVigente.orElse(null));
+            return calcularCostoTinta(productoInsumo, compraVigente.orElse(null), tintaContext);
         }
 
         if (requiereCalculoPorArea(productoInsumo, compraVigente.orElse(null))) {
@@ -295,7 +301,10 @@ public class ProductoService {
         return new CosteoDetalleResultado(costoUsado, null);
     }
 
-    private CosteoDetalleResultado calcularCostoTinta(ProductoInsumo productoInsumo, InsumoCompra compraVigente) {
+    private CosteoDetalleResultado calcularCostoTinta(
+            ProductoInsumo productoInsumo,
+            InsumoCompra compraVigente,
+            TintaContext tintaContext) {
         Insumo insumo = productoInsumo.getInsumo();
         String nombreInsumo = insumo.getNombre();
 
@@ -304,27 +313,28 @@ public class ProductoService {
             return new CosteoDetalleResultado(null, nombreInsumo + " no tiene precio total de compra.");
         }
 
-        BigDecimal cantidadMlComprada = obtenerCantidadComprada(insumo, compraVigente);
+        BigDecimal cantidadMlComprada = obtenerCantidadMlComprados(insumo, compraVigente);
         if (cantidadMlComprada == null || cantidadMlComprada.compareTo(BigDecimal.ZERO) <= 0) {
-            return new CosteoDetalleResultado(null, nombreInsumo + " no tiene cantidad ML comprada.");
+            return new CosteoDetalleResultado(null, "Faltan ML comprados para calcular tinta en " + nombreInsumo + ".");
         }
 
-        BigDecimal mlUsado = parsearConsumoMl(productoInsumo.getConsumo());
+        BigDecimal mlUsado = valorOZero(productoInsumo.getCantidadUsada());
+        if (mlUsado.compareTo(BigDecimal.ZERO) <= 0) {
+            mlUsado = parsearConsumoMl(productoInsumo.getConsumo());
+        }
         if (mlUsado == null) {
-            BigDecimal anchoUsado = productoInsumo.getAnchoUsadoCm();
-            BigDecimal altoUsado = productoInsumo.getAltoLargoUsadoCm();
-            BigDecimal cantidadUsada = valorOZero(productoInsumo.getCantidadUsada());
-
-            if (anchoUsado == null || anchoUsado.compareTo(BigDecimal.ZERO) <= 0
-                    || altoUsado == null || altoUsado.compareTo(BigDecimal.ZERO) <= 0) {
-                return new CosteoDetalleResultado(null, nombreInsumo + " no tiene medida usada.");
+            if (tintaContext.areaPrincipalCm2() == null || tintaContext.areaPrincipalCm2().compareTo(BigDecimal.ZERO) <= 0) {
+                return new CosteoDetalleResultado(null, "Faltan datos para calcular consumo de tinta en " + nombreInsumo + ".");
             }
-            if (cantidadUsada.compareTo(BigDecimal.ZERO) <= 0) {
-                return new CosteoDetalleResultado(null, "La cantidad usada de " + nombreInsumo + " debe ser mayor a cero.");
+            if (tintaContext.totalTintas() <= 0) {
+                return new CosteoDetalleResultado(null, "No fue posible distribuir el consumo de tinta para " + nombreInsumo + ".");
             }
 
-            BigDecimal areaUsadaCm2 = anchoUsado.multiply(altoUsado).multiply(cantidadUsada);
-            mlUsado = areaUsadaCm2.divide(AREA_BASE_TINTA_CM2, 8, RoundingMode.HALF_UP);
+            BigDecimal areaM2 = tintaContext.areaPrincipalCm2()
+                    .divide(CENTIMETROS_CUADRADOS_POR_METRO_CUADRADO, 8, RoundingMode.HALF_UP);
+            BigDecimal mlTotalesCombinados = areaM2.multiply(CONSUMO_TINTA_ML_POR_M2);
+            mlUsado = mlTotalesCombinados.divide(
+                    BigDecimal.valueOf(tintaContext.totalTintas()), 8, RoundingMode.HALF_UP);
         }
 
         if (mlUsado.compareTo(BigDecimal.ZERO) <= 0) {
@@ -368,6 +378,7 @@ public class ProductoService {
 
         return unidad.equals("ml")
                 || unidad.contains("mililitro")
+                || categoria.contains("sublimacion")
                 || categoria.contains("tinta")
                 || nombre.contains("tinta");
     }
@@ -413,6 +424,13 @@ public class ProductoService {
             return compraVigente.getCantidadComprada();
         }
         return insumo.getCantidadComprada();
+    }
+
+    private BigDecimal obtenerCantidadMlComprados(Insumo insumo, InsumoCompra compraVigente) {
+        if (compraVigente != null && compraVigente.getCantidadMlComprados() != null) {
+            return compraVigente.getCantidadMlComprados();
+        }
+        return insumo.getCantidadMlComprados();
     }
 
     private BigDecimal obtenerPrecioUnitario(
@@ -707,7 +725,54 @@ public class ProductoService {
         return valor == null ? BigDecimal.ZERO : valor;
     }
 
+    private TintaContext construirTintaContext(List<ProductoInsumo> relaciones) {
+        int totalTintas = 0;
+        BigDecimal areaPreferida = null;
+        BigDecimal areaMayor = null;
+
+        for (ProductoInsumo relacion : relaciones) {
+            Insumo insumo = relacion.getInsumo();
+
+            if (esInsumoTinta(insumo)) {
+                totalTintas++;
+            }
+
+            BigDecimal anchoUsado = relacion.getAnchoUsadoCm();
+            BigDecimal altoUsado = relacion.getAltoLargoUsadoCm();
+            if (anchoUsado == null || altoUsado == null
+                    || anchoUsado.compareTo(BigDecimal.ZERO) <= 0
+                    || altoUsado.compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+
+            BigDecimal areaActual = anchoUsado.multiply(altoUsado);
+            if (esAreaPrincipalDeImpresion(insumo)) {
+                if (areaPreferida == null || areaActual.compareTo(areaPreferida) > 0) {
+                    areaPreferida = areaActual;
+                }
+                continue;
+            }
+
+            if (areaMayor == null || areaActual.compareTo(areaMayor) > 0) {
+                areaMayor = areaActual;
+            }
+        }
+
+        return new TintaContext(totalTintas, areaPreferida != null ? areaPreferida : areaMayor);
+    }
+
+    private boolean esAreaPrincipalDeImpresion(Insumo insumo) {
+        String categoria = normalizeComparableText(insumo.getCategoria());
+        String nombre = normalizeComparableText(insumo.getNombre());
+        return categoria.contains("sublimacion")
+                || categoria.contains("papel")
+                || nombre.contains("papel")
+                || nombre.contains("sublimacion");
+    }
+
     private record CosteoDetalleResultado(BigDecimal costoEstimado, String mensajeCosto) {}
+
+    private record TintaContext(int totalTintas, BigDecimal areaPrincipalCm2) {}
 
     private record CosteoProductoResultado(
             BigDecimal costoMateriales,

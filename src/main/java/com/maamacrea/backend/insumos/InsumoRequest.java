@@ -24,6 +24,8 @@ public record InsumoRequest(
         @NotNull(message = "La cantidad comprada es obligatoria.")
                 @Positive(message = "La cantidad comprada debe ser mayor a cero.")
                 BigDecimal cantidadComprada,
+        @Positive(message = "La cantidad de ML comprados debe ser mayor a cero.")
+                BigDecimal cantidadMlComprados,
         @Positive(message = "El ancho debe ser mayor a cero.") BigDecimal ancho,
         @Positive(message = "El alto debe ser mayor a cero.") BigDecimal alto,
         @PositiveOrZero(message = "El precio neto no puede ser negativo.") BigDecimal precioNeto,

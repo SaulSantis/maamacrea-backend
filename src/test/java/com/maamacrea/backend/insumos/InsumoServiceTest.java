@@ -65,6 +65,7 @@ class InsumoServiceTest {
                 new BigDecimal("3"),
                 null,
                 null,
+                null,
                 new BigDecimal("1680"),
                 new BigDecimal("320"),
                 new BigDecimal("2000"),
@@ -129,6 +130,7 @@ class InsumoServiceTest {
                 new BigDecimal("3"),
                 null,
                 null,
+                null,
                 new BigDecimal("3360"),
                 new BigDecimal("640"),
                 new BigDecimal("4000"),
@@ -145,5 +147,54 @@ class InsumoServiceTest {
         assertThat(compraActual.get().isVigente()).isTrue();
         assertThat(response.tieneCambioPrecio()).isTrue();
         assertThat(response.ultimoCambioPrecio()).isEqualTo(LocalDate.of(2026, 7, 8));
+    }
+
+    @Test
+    void guardaCantidadMlCompradosEnInsumoDeTinta() {
+        AtomicReference<InsumoCompra> compraGuardada = new AtomicReference<>();
+
+        when(insumoRepository.existsByCodigoProductoIgnoreCase("T49M1")).thenReturn(false);
+        when(insumoRepository.save(any(Insumo.class))).thenAnswer(invocation -> {
+            Insumo insumo = invocation.getArgument(0);
+            if (insumo.getId() == null) {
+                insumo.setId(1L);
+            }
+            return insumo;
+        });
+        when(insumoCompraRepository.save(any(InsumoCompra.class))).thenAnswer(invocation -> {
+            InsumoCompra compra = invocation.getArgument(0);
+            if (compra.getId() == null) {
+                compra.setId(10L);
+            }
+            compraGuardada.set(compra);
+            return compra;
+        });
+        when(insumoCompraRepository.findFirstByInsumoIdAndVigenteTrueOrderByFechaCompraDescCreatedAtDescIdDesc(1L))
+                .thenAnswer(invocation -> Optional.ofNullable(compraGuardada.get()));
+        when(insumoCompraRepository.findByInsumoIdOrderByFechaCompraDescCreatedAtDescIdDesc(1L))
+                .thenAnswer(invocation -> compraGuardada.get() == null ? List.of() : List.of(compraGuardada.get()));
+
+        InsumoResponse response = insumoService.crear(new InsumoRequest(
+                "T49M1",
+                "Tinta Negra Sublimacion Epson",
+                "SUBLIMACION",
+                "ml",
+                new BigDecimal("1"),
+                new BigDecimal("140"),
+                null,
+                null,
+                null,
+                null,
+                new BigDecimal("19990"),
+                "Proveedor Tinta",
+                LocalDate.of(2026, 7, 8),
+                "FACTURA",
+                "F-100",
+                null,
+                "Tinta negra"));
+
+        assertThat(response.cantidadMlComprados()).isEqualByComparingTo("140.0000");
+        assertThat(compraGuardada.get().getCantidadMlComprados()).isEqualByComparingTo("140.0000");
+        assertThat(compraGuardada.get().getPrecioUnitario()).isEqualByComparingTo("142.7857");
     }
 }

@@ -43,6 +43,9 @@ public class InsumoCompra {
     @Column(name = "cantidad_comprada", nullable = false, precision = 12, scale = 3)
     private BigDecimal cantidadComprada;
 
+    @Column(name = "cantidad_ml_comprados", precision = 12, scale = 4)
+    private BigDecimal cantidadMlComprados;
+
     @Column(name = "unidad_medida", nullable = false, length = 40)
     private String unidadMedida;
 

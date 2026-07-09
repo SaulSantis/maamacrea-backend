@@ -134,9 +134,14 @@ public class InsumoService {
     }
 
     private void aplicarCompraInput(InsumoCompra compra, CompraInput compraInput) {
-        BigDecimal precioUnitario = calcularPrecioUnitario(compraInput.cantidadComprada(), compraInput.precioCompraTotal());
+        BigDecimal precioUnitario = calcularPrecioUnitario(
+                compraInput.cantidadComprada(),
+                compraInput.cantidadMlComprados(),
+                compraInput.unidadMedida(),
+                compraInput.precioCompraTotal());
         compra.setFechaCompra(compraInput.fechaCompra());
         compra.setCantidadComprada(compraInput.cantidadComprada().setScale(3, RoundingMode.HALF_UP));
+        compra.setCantidadMlComprados(scaleOptional(compraInput.cantidadMlComprados(), 4));
         compra.setUnidadMedida(compraInput.unidadMedida());
         compra.setPrecioCompraTotal(compraInput.precioCompraTotal().setScale(2, RoundingMode.HALF_UP));
         compra.setPrecioUnitario(precioUnitario);
@@ -162,6 +167,7 @@ public class InsumoService {
     private void sincronizarResumenCompra(Insumo insumo, InsumoCompra compra) {
         insumo.setUnidadMedida(compra.getUnidadMedida());
         insumo.setCantidadComprada(compra.getCantidadComprada());
+        insumo.setCantidadMlComprados(compra.getCantidadMlComprados());
         insumo.setAncho(compra.getAncho());
         insumo.setAlto(compra.getAlto());
         insumo.setPrecioNeto(compra.getPrecioNeto());
@@ -179,6 +185,7 @@ public class InsumoService {
         return new CompraInput(
                 insumoRequest.fechaCompra(),
                 insumoRequest.cantidadComprada(),
+                insumoRequest.cantidadMlComprados(),
                 normalizarUnidadMedida(insumoRequest.unidadMedida()),
                 resolverPrecioCompraTotal(insumoRequest.precioCompraTotal(), insumoRequest.precioNeto(), insumoRequest.iva()),
                 insumoRequest.precioNeto(),
@@ -195,6 +202,7 @@ public class InsumoService {
         return new CompraInput(
                 compraRequest.fechaCompra(),
                 compraRequest.cantidadComprada(),
+                compraRequest.cantidadMlComprados(),
                 normalizarUnidadMedida(compraRequest.unidadMedida()),
                 compraRequest.precioCompraTotal(),
                 compraRequest.precioNeto(),
@@ -216,6 +224,11 @@ public class InsumoService {
         }
         if (compraInput.unidadMedida() == null || compraInput.unidadMedida().isBlank()) {
             throw new IllegalArgumentException("La unidad de medida es obligatoria.");
+        }
+        if (isUnidadMililitros(compraInput.unidadMedida())
+                && (compraInput.cantidadMlComprados() == null
+                        || compraInput.cantidadMlComprados().compareTo(BigDecimal.ZERO) <= 0)) {
+            throw new IllegalArgumentException("La cantidad de ML comprados es obligatoria para insumos medidos en ML.");
         }
         if (compraInput.precioCompraTotal() == null || compraInput.precioCompraTotal().compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("El precio total de compra debe ser mayor a cero.");
@@ -283,6 +296,7 @@ public class InsumoService {
 
     private boolean tieneCambioDeCompra(InsumoCompra compraActual, CompraInput compraInput) {
         return !sameBigDecimal(compraActual.getCantidadComprada(), compraInput.cantidadComprada())
+                || !sameBigDecimal(compraActual.getCantidadMlComprados(), compraInput.cantidadMlComprados())
                 || !Objects.equals(normalizarUnidadMedida(compraActual.getUnidadMedida()), compraInput.unidadMedida())
                 || !sameBigDecimal(compraActual.getPrecioCompraTotal(), compraInput.precioCompraTotal())
                 || !sameBigDecimal(compraActual.getPrecioNeto(), compraInput.precioNeto())
@@ -304,8 +318,13 @@ public class InsumoService {
         return null;
     }
 
-    private BigDecimal calcularPrecioUnitario(BigDecimal cantidadComprada, BigDecimal precioCompraTotal) {
-        return precioCompraTotal.divide(cantidadComprada, 4, RoundingMode.HALF_UP);
+    private BigDecimal calcularPrecioUnitario(
+            BigDecimal cantidadComprada,
+            BigDecimal cantidadMlComprados,
+            String unidadMedida,
+            BigDecimal precioCompraTotal) {
+        BigDecimal divisor = isUnidadMililitros(unidadMedida) ? cantidadMlComprados : cantidadComprada;
+        return precioCompraTotal.divide(divisor, 4, RoundingMode.HALF_UP);
     }
 
     private BigDecimal calcularVariacionPorcentual(BigDecimal precioAnterior, BigDecimal precioActual) {
@@ -358,6 +377,16 @@ public class InsumoService {
         return unidadMedida == null ? null : unidadMedida.trim();
     }
 
+    private boolean isUnidadMililitros(String unidadMedida) {
+        String valorNormalizado = normalizarUnidadMedida(unidadMedida);
+        if (valorNormalizado == null) {
+            return false;
+        }
+
+        String comparable = valorNormalizado.toLowerCase(Locale.ROOT);
+        return comparable.equals("ml") || comparable.equals("mililitro") || comparable.equals("mililitros");
+    }
+
     private String normalizarTipoDocumento(String tipoDocumento) {
         String valorNormalizado = normalizarTexto(tipoDocumento);
         if (valorNormalizado == null) {
@@ -379,6 +408,7 @@ public class InsumoService {
                 categoria.getLabel(),
                 insumo.getUnidadMedida(),
                 insumo.getCantidadComprada(),
+                insumo.getCantidadMlComprados(),
                 insumo.getAncho(),
                 insumo.getAlto(),
                 insumo.getPrecioNeto(),
@@ -407,6 +437,7 @@ public class InsumoService {
                 compra.getInsumo().getId(),
                 compra.getFechaCompra(),
                 compra.getCantidadComprada(),
+                compra.getCantidadMlComprados(),
                 compra.getUnidadMedida(),
                 compra.getPrecioCompraTotal(),
                 compra.getPrecioUnitario(),
@@ -435,6 +466,7 @@ public class InsumoService {
     private record CompraInput(
             LocalDate fechaCompra,
             BigDecimal cantidadComprada,
+            BigDecimal cantidadMlComprados,
             String unidadMedida,
             BigDecimal precioCompraTotal,
             BigDecimal precioNeto,

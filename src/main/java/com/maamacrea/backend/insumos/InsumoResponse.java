@@ -12,6 +12,7 @@ public record InsumoResponse(
         String categoriaLabel,
         String unidadMedida,
         BigDecimal cantidadComprada,
+        BigDecimal cantidadMlComprados,
         BigDecimal ancho,
         BigDecimal alto,
         BigDecimal precioNeto,

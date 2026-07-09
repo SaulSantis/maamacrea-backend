@@ -13,6 +13,8 @@ public record InsumoCompraRequest(
         @NotNull(message = "La cantidad comprada es obligatoria.")
                 @Positive(message = "La cantidad comprada debe ser mayor a cero.")
                 BigDecimal cantidadComprada,
+        @Positive(message = "La cantidad de ML comprados debe ser mayor a cero.")
+                BigDecimal cantidadMlComprados,
         @NotBlank(message = "La unidad de medida es obligatoria.")
                 @Size(max = 40, message = "La unidad de medida no puede superar los 40 caracteres.")
                 String unidadMedida,
