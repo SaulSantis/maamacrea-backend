@@ -2,6 +2,7 @@ package com.maamacrea.backend.productos;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.within;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -44,6 +45,7 @@ class ProductoServiceTest {
 
     private Insumo insumoTextil;
     private Insumo insumoSublimacion;
+    private Insumo insumoPapelSublimacion;
     private Insumo insumoTinta;
 
     @BeforeEach
@@ -56,7 +58,9 @@ class ProductoServiceTest {
         insumoTextil.setUnidadMedida("rollo");
         insumoTextil.setCantidadComprada(new BigDecimal("1"));
         insumoTextil.setAncho(new BigDecimal("1.5"));
+        insumoTextil.setUnidadAncho("m");
         insumoTextil.setAlto(new BigDecimal("50"));
+        insumoTextil.setUnidadAlto("m");
         insumoTextil.setPrecioCompraTotal(new BigDecimal("40460"));
         insumoTextil.setCostoUnitario(new BigDecimal("40460.0000"));
 
@@ -69,6 +73,20 @@ class ProductoServiceTest {
         insumoSublimacion.setCantidadComprada(new BigDecimal("50"));
         insumoSublimacion.setPrecioCompraTotal(new BigDecimal("10000"));
         insumoSublimacion.setCostoUnitario(new BigDecimal("200.0000"));
+
+        insumoPapelSublimacion = new Insumo();
+        insumoPapelSublimacion.setId(5L);
+        insumoPapelSublimacion.setCodigoProducto("PP47170601");
+        insumoPapelSublimacion.setNombre("Papel Subli S-Race Rollo T");
+        insumoPapelSublimacion.setCategoria("SUBLIMACION");
+        insumoPapelSublimacion.setUnidadMedida("rollo");
+        insumoPapelSublimacion.setCantidadComprada(new BigDecimal("1"));
+        insumoPapelSublimacion.setAncho(new BigDecimal("61"));
+        insumoPapelSublimacion.setUnidadAncho("cm");
+        insumoPapelSublimacion.setAlto(new BigDecimal("55"));
+        insumoPapelSublimacion.setUnidadAlto("m");
+        insumoPapelSublimacion.setPrecioCompraTotal(new BigDecimal("35990"));
+        insumoPapelSublimacion.setCostoUnitario(new BigDecimal("35990.0000"));
 
         insumoTinta = new Insumo();
         insumoTinta.setId(4L);
@@ -170,7 +188,7 @@ class ProductoServiceTest {
         Producto productoGuardado = productoPersistido(1L, "COJ-PERS-001", "Cojin 43x43");
         ProductoInsumo relacionGuardada = relacionPersistida(
                 10L, productoGuardado, insumoTextil, "1.0000", "43.000", "43.000", "No aplica");
-        InsumoCompra compraVigente = compraPersistida(insumoTextil, "1.500", "50.000", "40460.00");
+        InsumoCompra compraVigente = compraPersistida(insumoTextil, "1.500", "m", "50.000", "m", "40460.00");
 
         when(productoRepository.existsByCodigoIgnoreCase("COJ-PERS-001")).thenReturn(false);
         when(productoRepository.save(any(Producto.class))).thenAnswer(invocation -> {
@@ -212,7 +230,7 @@ class ProductoServiceTest {
         Producto productoGuardado = productoPersistido(1L, "COJ-PERS-002", "Cojin 31x43");
         ProductoInsumo relacionGuardada = relacionPersistida(
                 10L, productoGuardado, insumoTextil, "2.0000", "31.000", "43.000", "No aplica");
-        InsumoCompra compraVigente = compraPersistida(insumoTextil, "1.500", "50.000", "40460.00");
+        InsumoCompra compraVigente = compraPersistida(insumoTextil, "1.500", "m", "50.000", "m", "40460.00");
 
         when(productoRepository.existsByCodigoIgnoreCase("COJ-PERS-002")).thenReturn(false);
         when(productoRepository.save(any(Producto.class))).thenAnswer(invocation -> {
@@ -249,7 +267,7 @@ class ProductoServiceTest {
         Producto productoGuardado = productoPersistido(1L, "COJ-PERS-003", "Cojin sin largo");
         ProductoInsumo relacionGuardada = relacionPersistida(
                 10L, productoGuardado, insumoTextil, "1.0000", "43.000", "43.000", "No aplica");
-        InsumoCompra compraVigente = compraPersistida(insumoTextil, "1.500", null, "40460.00");
+        InsumoCompra compraVigente = compraPersistida(insumoTextil, "1.500", "m", null, null, "40460.00");
         insumoTextil.setAlto(null);
 
         when(productoRepository.existsByCodigoIgnoreCase("COJ-PERS-003")).thenReturn(false);
@@ -279,9 +297,67 @@ class ProductoServiceTest {
                         null))));
 
         assertThat(response.costeoCompleto()).isFalse();
-        assertThat(response.advertenciasCosteo()).contains("Tela Bistrech Blanca no tiene largo de compra.");
+        assertThat(response.advertenciasCosteo())
+                .contains("Falta largo de compra para calcular costo por area en Tela Bistrech Blanca.");
         assertThat(response.insumos().get(0).costoEstimado()).isNull();
-        assertThat(response.insumos().get(0).mensajeCosto()).isEqualTo("Tela Bistrech Blanca no tiene largo de compra.");
+        assertThat(response.insumos().get(0).mensajeCosto())
+                .isEqualTo("Falta largo de compra para calcular costo por area en Tela Bistrech Blanca.");
+    }
+
+    @Test
+    void calculaCostoPapelSublimacionPorAreaSinClasificarloComoTinta() {
+        Producto productoGuardado = productoPersistido(1L, "COJ-PER-001", "Cojin Personalizado 40x40");
+        ProductoInsumo primerCorte = relacionPersistida(
+                10L, productoGuardado, insumoPapelSublimacion, "1.0000", "42.000", "42.000", "No aplica");
+        ProductoInsumo segundoCorte = relacionPersistida(
+                11L, productoGuardado, insumoPapelSublimacion, "1.0000", "16.000", "8.000", "No aplica");
+        InsumoCompra compraVigente =
+                compraPersistida(insumoPapelSublimacion, "61.000", "cm", "55.000", "m", "35990.00");
+
+        when(productoRepository.existsByCodigoIgnoreCase("COJ-PER-001")).thenReturn(false);
+        when(productoRepository.save(any(Producto.class))).thenAnswer(invocation -> {
+            Producto producto = invocation.getArgument(0);
+            if (producto.getId() == null) {
+                producto.setId(1L);
+            }
+            return producto;
+        });
+        when(insumoRepository.findById(5L)).thenReturn(Optional.of(insumoPapelSublimacion));
+        when(productoInsumoRepository.save(any(ProductoInsumo.class))).thenReturn(primerCorte, segundoCorte);
+        when(productoInsumoRepository.findByProductoIdOrderByIdAsc(1L))
+                .thenReturn(List.of(primerCorte, segundoCorte));
+        when(insumoCompraRepository.findFirstByInsumoIdAndVigenteTrueOrderByFechaCompraDescCreatedAtDescIdDesc(5L))
+                .thenReturn(Optional.of(compraVigente));
+
+        ProductoResponse response = productoService.crearProducto(new ProductoCreateRequest(
+                "COJ-PER-001",
+                "Cojin Personalizado 40x40",
+                ProductoTipo.COJIN_PERSONALIZADO,
+                List.of(
+                        new ProductoInsumoCreateRequest(
+                                5L,
+                                new BigDecimal("1"),
+                                new BigDecimal("42"),
+                                new BigDecimal("42"),
+                                "No aplica",
+                                null),
+                        new ProductoInsumoCreateRequest(
+                                5L,
+                                new BigDecimal("1"),
+                                new BigDecimal("16"),
+                                new BigDecimal("8"),
+                                "No aplica",
+                                null))));
+
+        assertThat(response.costeoCompleto()).isTrue();
+        assertThat(response.advertenciasCosteo()).isEmpty();
+        assertThat(response.insumos()).hasSize(2);
+        assertThat(response.insumos().get(0).costoEstimado())
+                .isCloseTo(new BigDecimal("189.2"), within(new BigDecimal("0.5")));
+        assertThat(response.insumos().get(1).costoEstimado())
+                .isCloseTo(new BigDecimal("13.7"), within(new BigDecimal("0.5")));
+        assertThat(response.insumos().get(0).mensajeCosto()).isNull();
+        assertThat(response.insumos().get(1).mensajeCosto()).isNull();
     }
 
     @Test
@@ -289,7 +365,7 @@ class ProductoServiceTest {
         Producto productoGuardado = productoPersistido(1L, "COJ-PERS-004", "Cojin sublimado");
         ProductoInsumo relacionGuardada = relacionPersistida(
                 10L, productoGuardado, insumoTinta, "0.8825", null, null, "0.8825 ML");
-        InsumoCompra compraVigente = compraPersistida(insumoTinta, null, null, "19990.00");
+        InsumoCompra compraVigente = compraPersistida(insumoTinta, null, null, null, null, "19990.00");
         compraVigente.setUnidadMedida("ml");
         compraVigente.setCantidadComprada(new BigDecimal("1.000"));
         compraVigente.setCantidadMlComprados(new BigDecimal("140.0000"));
@@ -330,7 +406,7 @@ class ProductoServiceTest {
         Producto productoGuardado = productoPersistido(1L, "COJ-PERS-005", "Cojin sublimado");
         ProductoInsumo relacionGuardada = relacionPersistida(
                 10L, productoGuardado, insumoTinta, "0.8825", null, null, "0.8825 ML");
-        InsumoCompra compraVigente = compraPersistida(insumoTinta, null, null, "19990.00");
+        InsumoCompra compraVigente = compraPersistida(insumoTinta, null, null, null, null, "19990.00");
         compraVigente.setUnidadMedida("ml");
         compraVigente.setCantidadComprada(new BigDecimal("1.000"));
         compraVigente.setCantidadMlComprados(null);
@@ -483,7 +559,13 @@ class ProductoServiceTest {
         return productoInsumo;
     }
 
-    private InsumoCompra compraPersistida(Insumo insumo, String ancho, String alto, String precioCompraTotal) {
+    private InsumoCompra compraPersistida(
+            Insumo insumo,
+            String ancho,
+            String unidadAncho,
+            String alto,
+            String unidadAlto,
+            String precioCompraTotal) {
         InsumoCompra compra = new InsumoCompra();
         compra.setId(20L);
         compra.setInsumo(insumo);
@@ -491,7 +573,9 @@ class ProductoServiceTest {
         compra.setCantidadComprada(new BigDecimal("1.000"));
         compra.setUnidadMedida("rollo");
         compra.setAncho(ancho == null ? null : new BigDecimal(ancho));
+        compra.setUnidadAncho(unidadAncho);
         compra.setAlto(alto == null ? null : new BigDecimal(alto));
+        compra.setUnidadAlto(unidadAlto);
         compra.setPrecioCompraTotal(new BigDecimal(precioCompraTotal));
         compra.setPrecioUnitario(new BigDecimal(precioCompraTotal));
         compra.setVigente(true);

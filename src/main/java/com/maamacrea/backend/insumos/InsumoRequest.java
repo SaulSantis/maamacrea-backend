@@ -27,7 +27,11 @@ public record InsumoRequest(
         @Positive(message = "La cantidad de ML comprados debe ser mayor a cero.")
                 BigDecimal cantidadMlComprados,
         @Positive(message = "El ancho debe ser mayor a cero.") BigDecimal ancho,
+        @Size(max = 20, message = "La unidad del ancho no puede superar los 20 caracteres.")
+                String unidadAncho,
         @Positive(message = "El alto debe ser mayor a cero.") BigDecimal alto,
+        @Size(max = 20, message = "La unidad del alto o largo no puede superar los 20 caracteres.")
+                String unidadAlto,
         @PositiveOrZero(message = "El precio neto no puede ser negativo.") BigDecimal precioNeto,
         @PositiveOrZero(message = "El IVA no puede ser negativo.") BigDecimal iva,
         @NotNull(message = "El precio total de compra es obligatorio.")

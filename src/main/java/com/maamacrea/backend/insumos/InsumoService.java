@@ -148,7 +148,9 @@ public class InsumoService {
         compra.setPrecioNeto(scaleOptional(compraInput.precioNeto(), 2));
         compra.setIva(scaleOptional(compraInput.iva(), 2));
         compra.setAncho(scaleOptional(compraInput.ancho(), 3));
+        compra.setUnidadAncho(compraInput.unidadAncho());
         compra.setAlto(scaleOptional(compraInput.alto(), 3));
+        compra.setUnidadAlto(compraInput.unidadAlto());
         compra.setTipoDocumento(compraInput.tipoDocumento());
         compra.setNumeroDocumento(compraInput.numeroDocumento());
         compra.setDocumentoUrl(compraInput.documentoUrl());
@@ -169,7 +171,9 @@ public class InsumoService {
         insumo.setCantidadComprada(compra.getCantidadComprada());
         insumo.setCantidadMlComprados(compra.getCantidadMlComprados());
         insumo.setAncho(compra.getAncho());
+        insumo.setUnidadAncho(compra.getUnidadAncho());
         insumo.setAlto(compra.getAlto());
+        insumo.setUnidadAlto(compra.getUnidadAlto());
         insumo.setPrecioNeto(compra.getPrecioNeto());
         insumo.setIva(compra.getIva());
         insumo.setPrecioCompraTotal(compra.getPrecioCompraTotal());
@@ -191,7 +195,9 @@ public class InsumoService {
                 insumoRequest.precioNeto(),
                 insumoRequest.iva(),
                 insumoRequest.ancho(),
+                normalizarUnidadDimension(insumoRequest.unidadAncho()),
                 insumoRequest.alto(),
+                normalizarUnidadDimension(insumoRequest.unidadAlto()),
                 normalizarTipoDocumento(insumoRequest.tipoDocumento()),
                 normalizarTexto(insumoRequest.numeroDocumento()),
                 normalizarTexto(insumoRequest.documentoUrl()),
@@ -208,7 +214,9 @@ public class InsumoService {
                 compraRequest.precioNeto(),
                 compraRequest.iva(),
                 compraRequest.ancho(),
+                normalizarUnidadDimension(compraRequest.unidadAncho()),
                 compraRequest.alto(),
+                normalizarUnidadDimension(compraRequest.unidadAlto()),
                 normalizarTipoDocumento(compraRequest.tipoDocumento()),
                 normalizarTexto(compraRequest.numeroDocumento()),
                 normalizarTexto(compraRequest.documentoUrl()),
@@ -235,6 +243,12 @@ public class InsumoService {
         }
         validarMedidaPositiva(compraInput.ancho(), "El ancho debe ser mayor a cero.");
         validarMedidaPositiva(compraInput.alto(), "El alto debe ser mayor a cero.");
+        if (compraInput.ancho() != null && (compraInput.unidadAncho() == null || compraInput.unidadAncho().isBlank())) {
+            throw new IllegalArgumentException("La unidad del ancho es obligatoria cuando se informa un ancho de compra.");
+        }
+        if (compraInput.alto() != null && (compraInput.unidadAlto() == null || compraInput.unidadAlto().isBlank())) {
+            throw new IllegalArgumentException("La unidad del alto o largo es obligatoria cuando se informa una medida de largo de compra.");
+        }
         validarNoNegativo(compraInput.precioNeto(), "El precio neto no puede ser negativo.");
         validarNoNegativo(compraInput.iva(), "El IVA no puede ser negativo.");
     }
@@ -302,7 +316,9 @@ public class InsumoService {
                 || !sameBigDecimal(compraActual.getPrecioNeto(), compraInput.precioNeto())
                 || !sameBigDecimal(compraActual.getIva(), compraInput.iva())
                 || !sameBigDecimal(compraActual.getAncho(), compraInput.ancho())
-                || !sameBigDecimal(compraActual.getAlto(), compraInput.alto());
+                || !Objects.equals(normalizarUnidadDimension(compraActual.getUnidadAncho()), compraInput.unidadAncho())
+                || !sameBigDecimal(compraActual.getAlto(), compraInput.alto())
+                || !Objects.equals(normalizarUnidadDimension(compraActual.getUnidadAlto()), compraInput.unidadAlto());
     }
 
     private BigDecimal resolverPrecioCompraTotal(
@@ -396,6 +412,11 @@ public class InsumoService {
         return InsumoTipoDocumento.fromCodigo(valorNormalizado.toUpperCase(Locale.ROOT)).getCodigo();
     }
 
+    private String normalizarUnidadDimension(String unidadDimension) {
+        String valorNormalizado = normalizarTexto(unidadDimension);
+        return valorNormalizado == null ? null : valorNormalizado.toLowerCase(Locale.ROOT);
+    }
+
     private InsumoResponse toResponse(Insumo insumo) {
         InsumoCategoria categoria = InsumoCategoria.fromCodigo(insumo.getCategoria());
         CompraResumen resumen = construirResumenCompra(insumo.getId());
@@ -410,7 +431,9 @@ public class InsumoService {
                 insumo.getCantidadComprada(),
                 insumo.getCantidadMlComprados(),
                 insumo.getAncho(),
+                insumo.getUnidadAncho(),
                 insumo.getAlto(),
+                insumo.getUnidadAlto(),
                 insumo.getPrecioNeto(),
                 insumo.getIva(),
                 insumo.getPrecioCompraTotal(),
@@ -444,7 +467,9 @@ public class InsumoService {
                 compra.getPrecioNeto(),
                 compra.getIva(),
                 compra.getAncho(),
+                compra.getUnidadAncho(),
                 compra.getAlto(),
+                compra.getUnidadAlto(),
                 compra.getTipoDocumento(),
                 compra.getNumeroDocumento(),
                 compra.getDocumentoUrl(),
@@ -472,7 +497,9 @@ public class InsumoService {
             BigDecimal precioNeto,
             BigDecimal iva,
             BigDecimal ancho,
+            String unidadAncho,
             BigDecimal alto,
+            String unidadAlto,
             String tipoDocumento,
             String numeroDocumento,
             String documentoUrl,

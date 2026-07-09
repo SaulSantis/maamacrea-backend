@@ -64,8 +64,14 @@ public class InsumoCompra {
     @Column(precision = 12, scale = 3)
     private BigDecimal ancho;
 
+    @Column(name = "unidad_ancho", length = 20)
+    private String unidadAncho;
+
     @Column(precision = 12, scale = 3)
     private BigDecimal alto;
+
+    @Column(name = "unidad_alto", length = 20)
+    private String unidadAlto;
 
     @Column(name = "tipo_documento", length = 40)
     private String tipoDocumento;

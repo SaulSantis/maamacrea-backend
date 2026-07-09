@@ -25,6 +25,7 @@ public class ProductoService {
     private static final BigDecimal CIEN = new BigDecimal("100");
     private static final BigDecimal MARGEN_VENTA_DEFECTO = new BigDecimal("0.50");
     private static final BigDecimal FACTOR_METROS_A_CENTIMETROS = new BigDecimal("100");
+    private static final BigDecimal FACTOR_MILIMETROS_A_CENTIMETROS = new BigDecimal("0.1");
     private static final BigDecimal CENTIMETROS_CUADRADOS_POR_METRO_CUADRADO = new BigDecimal("10000");
     private static final BigDecimal CONSUMO_TINTA_ML_POR_M2 = new BigDecimal("20");
     private static final Pattern DECIMAL_PATTERN = Pattern.compile("(\\d+(?:[.,]\\d+)?)");
@@ -215,7 +216,7 @@ public class ProductoService {
         Insumo insumo = productoInsumo.getInsumo();
         Optional<InsumoCompra> compraVigente = obtenerCompraVigente(insumo.getId());
 
-        if (esInsumoTinta(insumo)) {
+        if (esInsumoTinta(insumo, compraVigente.orElse(null))) {
             return calcularCostoTinta(productoInsumo, compraVigente.orElse(null), tintaContext);
         }
 
@@ -232,27 +233,27 @@ public class ProductoService {
 
         BigDecimal precioCompraTotal = obtenerPrecioCompraTotal(insumo, compraVigente);
         if (precioCompraTotal == null || precioCompraTotal.compareTo(BigDecimal.ZERO) <= 0) {
-            return new CosteoDetalleResultado(null, nombreInsumo + " no tiene precio total de compra.");
+            return new CosteoDetalleResultado(null, "Falta precio total de compra para calcular " + nombreInsumo + ".");
         }
 
         BigDecimal anchoCompra = obtenerAnchoCompra(insumo, compraVigente);
         if (anchoCompra == null || anchoCompra.compareTo(BigDecimal.ZERO) <= 0) {
-            return new CosteoDetalleResultado(null, nombreInsumo + " no tiene ancho de compra.");
+            return new CosteoDetalleResultado(null, "Falta ancho de compra para calcular costo por area en " + nombreInsumo + ".");
         }
 
         BigDecimal largoCompra = obtenerAltoLargoCompra(insumo, compraVigente);
         if (largoCompra == null || largoCompra.compareTo(BigDecimal.ZERO) <= 0) {
-            return new CosteoDetalleResultado(null, nombreInsumo + " no tiene largo de compra.");
+            return new CosteoDetalleResultado(null, "Falta largo de compra para calcular costo por area en " + nombreInsumo + ".");
         }
 
         BigDecimal anchoUsado = productoInsumo.getAnchoUsadoCm();
         if (anchoUsado == null || anchoUsado.compareTo(BigDecimal.ZERO) <= 0) {
-            return new CosteoDetalleResultado(null, nombreInsumo + " no tiene ancho usado.");
+            return new CosteoDetalleResultado(null, "Falta ancho usado para calcular costo por area en " + nombreInsumo + ".");
         }
 
         BigDecimal altoUsado = productoInsumo.getAltoLargoUsadoCm();
         if (altoUsado == null || altoUsado.compareTo(BigDecimal.ZERO) <= 0) {
-            return new CosteoDetalleResultado(null, nombreInsumo + " no tiene medida usada.");
+            return new CosteoDetalleResultado(null, "Falta medida usada para calcular costo por area en " + nombreInsumo + ".");
         }
 
         BigDecimal cantidadUsada = valorOZero(productoInsumo.getCantidadUsada());
@@ -260,8 +261,15 @@ public class ProductoService {
             return new CosteoDetalleResultado(null, "La cantidad usada de " + nombreInsumo + " debe ser mayor a cero.");
         }
 
-        BigDecimal anchoCompraCm = normalizarDimensionCompraACm(insumo, compraVigente, anchoCompra);
-        BigDecimal largoCompraCm = normalizarDimensionCompraACm(insumo, compraVigente, largoCompra);
+        BigDecimal anchoCompraCm = normalizarDimensionCompraACm(insumo, compraVigente, anchoCompra, true);
+        if (anchoCompraCm == null) {
+            return new CosteoDetalleResultado(null, "Falta unidad de ancho de compra para calcular costo por area en " + nombreInsumo + ".");
+        }
+
+        BigDecimal largoCompraCm = normalizarDimensionCompraACm(insumo, compraVigente, largoCompra, false);
+        if (largoCompraCm == null) {
+            return new CosteoDetalleResultado(null, "Falta unidad de largo de compra para calcular costo por area en " + nombreInsumo + ".");
+        }
         BigDecimal areaTotalCompradaCm2 = anchoCompraCm.multiply(largoCompraCm);
         if (areaTotalCompradaCm2.compareTo(BigDecimal.ZERO) <= 0) {
             return new CosteoDetalleResultado(null, nombreInsumo + " no tiene un area total de compra valida.");
@@ -284,12 +292,12 @@ public class ProductoService {
 
         BigDecimal precioCompraTotal = obtenerPrecioCompraTotal(insumo, compraVigente);
         if (precioCompraTotal == null || precioCompraTotal.compareTo(BigDecimal.ZERO) <= 0) {
-            return new CosteoDetalleResultado(null, nombreInsumo + " no tiene precio total de compra.");
+            return new CosteoDetalleResultado(null, "Falta precio total de compra para calcular " + nombreInsumo + ".");
         }
 
         BigDecimal cantidadComprada = obtenerCantidadComprada(insumo, compraVigente);
         if (cantidadComprada == null || cantidadComprada.compareTo(BigDecimal.ZERO) <= 0) {
-            return new CosteoDetalleResultado(null, nombreInsumo + " no tiene cantidad comprada.");
+            return new CosteoDetalleResultado(null, "Falta cantidad comprada para calcular " + nombreInsumo + ".");
         }
 
         BigDecimal precioUnitario = obtenerPrecioUnitario(insumo, compraVigente, precioCompraTotal, cantidadComprada);
@@ -371,45 +379,109 @@ public class ProductoService {
                 || nombre.contains("papel");
     }
 
-    private boolean esInsumoTinta(Insumo insumo) {
-        String unidad = normalizeComparableText(insumo.getUnidadMedida());
+    private boolean esInsumoTinta(Insumo insumo, InsumoCompra compraVigente) {
+        String unidad = normalizeComparableText(obtenerUnidadMedida(insumo, compraVigente));
         String categoria = normalizeComparableText(insumo.getCategoria());
         String nombre = normalizeComparableText(insumo.getNombre());
+        String codigo = normalizeComparableText(insumo.getCodigoProducto());
 
         return unidad.equals("ml")
                 || unidad.contains("mililitro")
-                || categoria.contains("sublimacion")
+                || tieneCantidadMlComprados(insumo, compraVigente)
                 || categoria.contains("tinta")
-                || nombre.contains("tinta");
+                || nombre.contains("tinta")
+                || codigo.startsWith("t49m")
+                || codigo.startsWith("tin");
     }
 
-    private BigDecimal normalizarDimensionCompraACm(Insumo insumo, InsumoCompra compraVigente, BigDecimal valor) {
+    private BigDecimal normalizarDimensionCompraACm(
+            Insumo insumo,
+            InsumoCompra compraVigente,
+            BigDecimal valor,
+            boolean esAncho) {
         if (valor == null) {
             return null;
         }
 
-        if (compraExpresadaEnMetros(insumo, compraVigente)) {
-            return valor.multiply(FACTOR_METROS_A_CENTIMETROS);
+        String unidadExplicita = obtenerUnidadDimensionCompra(insumo, compraVigente, esAncho);
+        if (unidadExplicita != null) {
+            return convertirDimensionCompraACm(valor, unidadExplicita);
         }
 
-        return valor;
+        String unidadInferida = inferirUnidadDimensionCompra(insumo, compraVigente, valor, esAncho);
+        return unidadInferida == null ? null : convertirDimensionCompraACm(valor, unidadInferida);
     }
 
-    private boolean compraExpresadaEnMetros(Insumo insumo, InsumoCompra compraVigente) {
+    private String obtenerUnidadDimensionCompra(Insumo insumo, InsumoCompra compraVigente, boolean esAncho) {
+        String unidadCompra = compraVigente != null
+                ? (esAncho ? compraVigente.getUnidadAncho() : compraVigente.getUnidadAlto())
+                : null;
+        if (unidadCompra != null && !unidadCompra.isBlank()) {
+            return normalizeComparableText(unidadCompra);
+        }
+
+        String unidadInsumo = esAncho ? insumo.getUnidadAncho() : insumo.getUnidadAlto();
+        return unidadInsumo == null || unidadInsumo.isBlank() ? null : normalizeComparableText(unidadInsumo);
+    }
+
+    private String inferirUnidadDimensionCompra(
+            Insumo insumo,
+            InsumoCompra compraVigente,
+            BigDecimal valor,
+            boolean esAncho) {
         String unidad = normalizeComparableText(obtenerUnidadMedida(insumo, compraVigente));
         String categoria = normalizeComparableText(insumo.getCategoria());
         String nombre = normalizeComparableText(insumo.getNombre());
 
-        return unidad.equals("rollo")
-                || unidad.contains("metro")
-                || unidad.equals("m")
-                || unidad.contains("metro lineal")
-                || categoria.contains("textil")
+        if (nombre.contains("papel")) {
+            return esAncho ? "cm" : "m";
+        }
+
+        if (categoria.contains("textil")
                 || categoria.contains("materiales textiles")
                 || nombre.contains("tela")
                 || nombre.contains("bistrech")
-                || nombre.contains("bistretch")
-                || nombre.contains("papel");
+                || nombre.contains("bistretch")) {
+            if (!esAncho) {
+                return "m";
+            }
+            return valor.compareTo(BigDecimal.TEN) <= 0 ? "m" : "cm";
+        }
+
+        if (unidad.equals("m") || unidad.contains("metro")) {
+            return "m";
+        }
+
+        if (unidad.equals("cm") || unidad.contains("centimetro")) {
+            return "cm";
+        }
+
+        return unidad.equals("rollo") ? (esAncho ? "cm" : "m") : null;
+    }
+
+    private BigDecimal convertirDimensionCompraACm(BigDecimal valor, String unidad) {
+        if (valor == null || unidad == null || unidad.isBlank()) {
+            return null;
+        }
+
+        if (unidad.equals("cm") || unidad.contains("centimetro")) {
+            return valor;
+        }
+
+        if (unidad.equals("m") || unidad.contains("metro")) {
+            return valor.multiply(FACTOR_METROS_A_CENTIMETROS);
+        }
+
+        if (unidad.equals("mm") || unidad.contains("milimetro")) {
+            return valor.multiply(FACTOR_MILIMETROS_A_CENTIMETROS);
+        }
+
+        return null;
+    }
+
+    private boolean tieneCantidadMlComprados(Insumo insumo, InsumoCompra compraVigente) {
+        BigDecimal cantidadMlComprados = obtenerCantidadMlComprados(insumo, compraVigente);
+        return cantidadMlComprados != null && cantidadMlComprados.compareTo(BigDecimal.ZERO) > 0;
     }
 
     private BigDecimal obtenerPrecioCompraTotal(Insumo insumo, InsumoCompra compraVigente) {
@@ -733,7 +805,7 @@ public class ProductoService {
         for (ProductoInsumo relacion : relaciones) {
             Insumo insumo = relacion.getInsumo();
 
-            if (esInsumoTinta(insumo)) {
+            if (esInsumoTinta(insumo, null)) {
                 totalTintas++;
             }
 
