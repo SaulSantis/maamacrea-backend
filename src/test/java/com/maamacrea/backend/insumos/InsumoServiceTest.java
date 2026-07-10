@@ -212,11 +212,22 @@ class InsumoServiceTest {
 
     @Test
     void guardaContenidoDeConoConConversionAYCostoPorMetro() {
+        AtomicReference<Insumo> primerInsumoGuardado = new AtomicReference<>();
         AtomicReference<InsumoCompra> compraGuardada = new AtomicReference<>();
 
         when(insumoRepository.existsByCodigoProductoIgnoreCase("CON-HIL-BLA-001")).thenReturn(false);
         when(insumoRepository.save(any(Insumo.class))).thenAnswer(invocation -> {
             Insumo insumo = invocation.getArgument(0);
+            if (primerInsumoGuardado.get() == null) {
+                Insumo snapshot = new Insumo();
+                snapshot.setCantidadComprada(insumo.getCantidadComprada());
+                snapshot.setContenidoPorUnidad(insumo.getContenidoPorUnidad());
+                snapshot.setUnidadContenido(insumo.getUnidadContenido());
+                snapshot.setContenidoTotalComprado(insumo.getContenidoTotalComprado());
+                snapshot.setPrecioCompraTotal(insumo.getPrecioCompraTotal());
+                snapshot.setCostoUnitario(insumo.getCostoUnitario());
+                primerInsumoGuardado.set(snapshot);
+            }
             if (insumo.getId() == null) {
                 insumo.setId(1L);
             }
@@ -258,6 +269,13 @@ class InsumoServiceTest {
                 null,
                 "Hilo blanco"));
 
+        assertThat(primerInsumoGuardado.get()).isNotNull();
+        assertThat(primerInsumoGuardado.get().getCantidadComprada()).isEqualByComparingTo("9.000");
+        assertThat(primerInsumoGuardado.get().getContenidoPorUnidad()).isEqualByComparingTo("2000.0000");
+        assertThat(primerInsumoGuardado.get().getUnidadContenido()).isEqualTo("yd");
+        assertThat(primerInsumoGuardado.get().getContenidoTotalComprado()).isEqualByComparingTo("16459.2000");
+        assertThat(primerInsumoGuardado.get().getPrecioCompraTotal()).isEqualByComparingTo("18000.00");
+        assertThat(primerInsumoGuardado.get().getCostoUnitario()).isEqualByComparingTo("1.0936");
         assertThat(response.contenidoPorUnidad()).isEqualByComparingTo("2000.0000");
         assertThat(response.unidadContenido()).isEqualTo("yd");
         assertThat(response.contenidoTotalComprado()).isEqualByComparingTo("16459.2000");

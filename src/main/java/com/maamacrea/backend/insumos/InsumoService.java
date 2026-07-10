@@ -54,8 +54,10 @@ public class InsumoService {
     public InsumoResponse crear(InsumoRequest insumoRequest) {
         Insumo insumo = new Insumo();
         aplicarCamposBase(insumo, insumoRequest);
+        CompraInput compraInput = buildCompraInput(insumoRequest);
+        sincronizarResumenCompraInicial(insumo, compraInput);
         Insumo guardado = insumoRepository.save(insumo);
-        registrarNuevaCompraInterna(guardado, buildCompraInput(insumoRequest));
+        registrarNuevaCompraInterna(guardado, compraInput);
         return toResponse(insumoRepository.save(guardado));
     }
 
@@ -191,6 +193,14 @@ public class InsumoService {
         insumo.setNumeroDocumento(compra.getNumeroDocumento());
         insumo.setDocumentoUrl(compra.getDocumentoUrl());
         insumo.setNotas(compra.getObservacion());
+    }
+
+    private void sincronizarResumenCompraInicial(Insumo insumo, CompraInput compraInput) {
+        validarCompraInput(compraInput);
+
+        InsumoCompra compraTemporal = new InsumoCompra();
+        aplicarCompraInput(compraTemporal, compraInput);
+        sincronizarResumenCompra(insumo, compraTemporal);
     }
 
     private CompraInput buildCompraInput(InsumoRequest insumoRequest) {
