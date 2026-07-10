@@ -68,6 +68,8 @@ class InsumoServiceTest {
                 null,
                 null,
                 null,
+                null,
+                null,
                 new BigDecimal("1680"),
                 new BigDecimal("320"),
                 new BigDecimal("2000"),
@@ -135,6 +137,8 @@ class InsumoServiceTest {
                 null,
                 null,
                 null,
+                null,
+                null,
                 new BigDecimal("3360"),
                 new BigDecimal("640"),
                 new BigDecimal("4000"),
@@ -191,6 +195,8 @@ class InsumoServiceTest {
                 null,
                 null,
                 null,
+                null,
+                null,
                 new BigDecimal("19990"),
                 "Proveedor Tinta",
                 LocalDate.of(2026, 7, 8),
@@ -202,5 +208,59 @@ class InsumoServiceTest {
         assertThat(response.cantidadMlComprados()).isEqualByComparingTo("140.0000");
         assertThat(compraGuardada.get().getCantidadMlComprados()).isEqualByComparingTo("140.0000");
         assertThat(compraGuardada.get().getPrecioUnitario()).isEqualByComparingTo("142.7857");
+    }
+
+    @Test
+    void guardaContenidoDeConoConConversionAYCostoPorMetro() {
+        AtomicReference<InsumoCompra> compraGuardada = new AtomicReference<>();
+
+        when(insumoRepository.existsByCodigoProductoIgnoreCase("CON-HIL-BLA-001")).thenReturn(false);
+        when(insumoRepository.save(any(Insumo.class))).thenAnswer(invocation -> {
+            Insumo insumo = invocation.getArgument(0);
+            if (insumo.getId() == null) {
+                insumo.setId(1L);
+            }
+            return insumo;
+        });
+        when(insumoCompraRepository.save(any(InsumoCompra.class))).thenAnswer(invocation -> {
+            InsumoCompra compra = invocation.getArgument(0);
+            if (compra.getId() == null) {
+                compra.setId(10L);
+            }
+            compraGuardada.set(compra);
+            return compra;
+        });
+        when(insumoCompraRepository.findFirstByInsumoIdAndVigenteTrueOrderByFechaCompraDescCreatedAtDescIdDesc(1L))
+                .thenAnswer(invocation -> Optional.ofNullable(compraGuardada.get()));
+        when(insumoCompraRepository.findByInsumoIdOrderByFechaCompraDescCreatedAtDescIdDesc(1L))
+                .thenAnswer(invocation -> compraGuardada.get() == null ? List.of() : List.of(compraGuardada.get()));
+
+        InsumoResponse response = insumoService.crear(new InsumoRequest(
+                "CON-HIL-BLA-001",
+                "Cono Hilo Blanco",
+                "COSTURA_Y_CONFECCION",
+                "cono",
+                new BigDecimal("9"),
+                null,
+                new BigDecimal("2000"),
+                "yd",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                new BigDecimal("18000"),
+                "Proveedor Hilo",
+                LocalDate.of(2026, 7, 9),
+                "FACTURA",
+                "F-300",
+                null,
+                "Hilo blanco"));
+
+        assertThat(response.contenidoPorUnidad()).isEqualByComparingTo("2000.0000");
+        assertThat(response.unidadContenido()).isEqualTo("yd");
+        assertThat(response.contenidoTotalComprado()).isEqualByComparingTo("16459.2000");
+        assertThat(compraGuardada.get().getPrecioUnitario()).isEqualByComparingTo("1.0936");
     }
 }

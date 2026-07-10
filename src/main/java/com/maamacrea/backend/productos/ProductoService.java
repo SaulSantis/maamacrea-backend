@@ -220,6 +220,10 @@ public class ProductoService {
             return calcularCostoTinta(productoInsumo, compraVigente.orElse(null), tintaContext);
         }
 
+        if (esInsumoPorLongitud(insumo, compraVigente.orElse(null))) {
+            return calcularCostoPorLongitud(productoInsumo, compraVigente.orElse(null));
+        }
+
         if (requiereCalculoPorArea(productoInsumo, compraVigente.orElse(null))) {
             return calcularCostoPorArea(productoInsumo, compraVigente.orElse(null));
         }
@@ -309,6 +313,30 @@ public class ProductoService {
         return new CosteoDetalleResultado(costoUsado, null);
     }
 
+    private CosteoDetalleResultado calcularCostoPorLongitud(ProductoInsumo productoInsumo, InsumoCompra compraVigente) {
+        Insumo insumo = productoInsumo.getInsumo();
+        String nombreInsumo = insumo.getNombre();
+
+        BigDecimal precioCompraTotal = obtenerPrecioCompraTotal(insumo, compraVigente);
+        if (precioCompraTotal == null || precioCompraTotal.compareTo(BigDecimal.ZERO) <= 0) {
+            return new CosteoDetalleResultado(null, "Falta precio total de compra para calcular " + nombreInsumo + ".");
+        }
+
+        BigDecimal contenidoTotalComprado = obtenerContenidoTotalComprado(insumo, compraVigente);
+        if (contenidoTotalComprado == null || contenidoTotalComprado.compareTo(BigDecimal.ZERO) <= 0) {
+            return new CosteoDetalleResultado(null, "Falta contenido total comprado en metros para calcular " + nombreInsumo + ".");
+        }
+
+        BigDecimal cantidadUsada = valorOZero(productoInsumo.getCantidadUsada());
+        if (cantidadUsada.compareTo(BigDecimal.ZERO) <= 0) {
+            return new CosteoDetalleResultado(null, "La cantidad usada de " + nombreInsumo + " debe ser mayor a cero.");
+        }
+
+        BigDecimal costoPorMetro = precioCompraTotal.divide(contenidoTotalComprado, 8, RoundingMode.HALF_UP);
+        BigDecimal costoUsado = costoPorMetro.multiply(cantidadUsada).setScale(4, RoundingMode.HALF_UP);
+        return new CosteoDetalleResultado(costoUsado, null);
+    }
+
     private CosteoDetalleResultado calcularCostoTinta(
             ProductoInsumo productoInsumo,
             InsumoCompra compraVigente,
@@ -377,6 +405,19 @@ public class ProductoService {
                 || nombre.contains("bistrech")
                 || nombre.contains("bistretch")
                 || nombre.contains("papel");
+    }
+
+    private boolean esInsumoPorLongitud(Insumo insumo, InsumoCompra compraVigente) {
+        String unidad = normalizeComparableText(obtenerUnidadMedida(insumo, compraVigente));
+        String unidadContenido = normalizeComparableText(obtenerUnidadContenido(insumo, compraVigente));
+
+        return unidad.equals("cono")
+                || unidadContenido.equals("m")
+                || unidadContenido.equals("metro")
+                || unidadContenido.equals("metros")
+                || unidadContenido.equals("yd")
+                || unidadContenido.equals("yarda")
+                || unidadContenido.equals("yardas");
     }
 
     private boolean esInsumoTinta(Insumo insumo, InsumoCompra compraVigente) {
@@ -503,6 +544,20 @@ public class ProductoService {
             return compraVigente.getCantidadMlComprados();
         }
         return insumo.getCantidadMlComprados();
+    }
+
+    private BigDecimal obtenerContenidoTotalComprado(Insumo insumo, InsumoCompra compraVigente) {
+        if (compraVigente != null && compraVigente.getContenidoTotalComprado() != null) {
+            return compraVigente.getContenidoTotalComprado();
+        }
+        return insumo.getContenidoTotalComprado();
+    }
+
+    private String obtenerUnidadContenido(Insumo insumo, InsumoCompra compraVigente) {
+        if (compraVigente != null && compraVigente.getUnidadContenido() != null && !compraVigente.getUnidadContenido().isBlank()) {
+            return compraVigente.getUnidadContenido();
+        }
+        return insumo.getUnidadContenido();
     }
 
     private BigDecimal obtenerPrecioUnitario(

@@ -47,6 +47,15 @@ public class Insumo {
     @Column(name = "cantidad_ml_comprados", precision = 12, scale = 4)
     private BigDecimal cantidadMlComprados;
 
+    @Column(name = "contenido_por_unidad", precision = 12, scale = 4)
+    private BigDecimal contenidoPorUnidad;
+
+    @Column(name = "unidad_contenido", length = 20)
+    private String unidadContenido;
+
+    @Column(name = "contenido_total_comprado", precision = 14, scale = 4)
+    private BigDecimal contenidoTotalComprado;
+
     @Column(precision = 12, scale = 3)
     private BigDecimal ancho;
 

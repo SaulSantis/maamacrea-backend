@@ -47,6 +47,7 @@ class ProductoServiceTest {
     private Insumo insumoSublimacion;
     private Insumo insumoPapelSublimacion;
     private Insumo insumoTinta;
+    private Insumo insumoHilo;
 
     @BeforeEach
     void setUp() {
@@ -98,6 +99,19 @@ class ProductoServiceTest {
         insumoTinta.setCantidadMlComprados(new BigDecimal("140"));
         insumoTinta.setPrecioCompraTotal(new BigDecimal("19990"));
         insumoTinta.setCostoUnitario(new BigDecimal("142.7857"));
+
+        insumoHilo = new Insumo();
+        insumoHilo.setId(6L);
+        insumoHilo.setCodigoProducto("CON-HIL-BLA-001");
+        insumoHilo.setNombre("Cono Hilo Blanco");
+        insumoHilo.setCategoria("COSTURA_Y_CONFECCION");
+        insumoHilo.setUnidadMedida("cono");
+        insumoHilo.setCantidadComprada(new BigDecimal("9"));
+        insumoHilo.setContenidoPorUnidad(new BigDecimal("1829"));
+        insumoHilo.setUnidadContenido("m");
+        insumoHilo.setContenidoTotalComprado(new BigDecimal("16461"));
+        insumoHilo.setPrecioCompraTotal(new BigDecimal("18000"));
+        insumoHilo.setCostoUnitario(new BigDecimal("1.0935"));
     }
 
     @Test
@@ -260,6 +274,58 @@ class ProductoServiceTest {
 
         assertThat(response.costoMateriales()).isEqualByComparingTo("143.8218");
         assertThat(response.insumos().get(0).costoEstimado()).isEqualByComparingTo("143.8218");
+    }
+
+    @Test
+    void calculaCostoDeHiloPorMetroCuandoElInsumoEsCono() {
+        Producto productoGuardado = productoPersistido(1L, "COJ-PERS-003", "Cojin 40x40");
+        ProductoInsumo relacionGuardada = relacionPersistida(
+                13L, productoGuardado, insumoHilo, "3.0000", null, null, "3 m");
+
+        InsumoCompra compraVigente = new InsumoCompra();
+        compraVigente.setId(21L);
+        compraVigente.setInsumo(insumoHilo);
+        compraVigente.setFechaCompra(LocalDate.of(2026, 7, 9));
+        compraVigente.setCantidadComprada(new BigDecimal("9.000"));
+        compraVigente.setUnidadMedida("cono");
+        compraVigente.setContenidoPorUnidad(new BigDecimal("1829.0000"));
+        compraVigente.setUnidadContenido("m");
+        compraVigente.setContenidoTotalComprado(new BigDecimal("16461.0000"));
+        compraVigente.setPrecioCompraTotal(new BigDecimal("18000.00"));
+        compraVigente.setPrecioUnitario(new BigDecimal("1.0935"));
+        compraVigente.setVigente(true);
+
+        when(productoRepository.existsByCodigoIgnoreCase("COJ-PERS-003")).thenReturn(false);
+        when(productoRepository.save(any(Producto.class))).thenAnswer(invocation -> {
+            Producto producto = invocation.getArgument(0);
+            if (producto.getId() == null) {
+                producto.setId(1L);
+            }
+            return producto;
+        });
+        when(insumoRepository.findById(6L)).thenReturn(Optional.of(insumoHilo));
+        when(productoInsumoRepository.save(any(ProductoInsumo.class))).thenReturn(relacionGuardada);
+        when(productoInsumoRepository.findByProductoIdOrderByIdAsc(1L)).thenReturn(List.of(relacionGuardada));
+        when(insumoCompraRepository.findFirstByInsumoIdAndVigenteTrueOrderByFechaCompraDescCreatedAtDescIdDesc(6L))
+                .thenReturn(Optional.of(compraVigente));
+
+        ProductoResponse response = productoService.crearProducto(new ProductoCreateRequest(
+                "COJ-PERS-003",
+                "Cojin 40x40",
+                ProductoTipo.COJIN_PERSONALIZADO,
+                List.of(new ProductoInsumoCreateRequest(
+                        6L,
+                        new BigDecimal("3"),
+                        null,
+                        null,
+                        "3 m",
+                        null))));
+
+        assertThat(response.costeoCompleto()).isTrue();
+        assertThat(response.advertenciasCosteo()).isEmpty();
+        assertThat(response.costoMateriales()).isEqualByComparingTo("3.2805");
+        assertThat(response.insumos().get(0).costoEstimado()).isEqualByComparingTo("3.2805");
+        assertThat(response.insumos().get(0).medidaUsadaTexto()).isEqualTo("No aplica");
     }
 
     @Test

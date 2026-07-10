@@ -15,6 +15,7 @@ import org.springframework.web.multipart.MultipartFile;
 @Service
 @Transactional(readOnly = true)
 public class InsumoService {
+    private static final BigDecimal FACTOR_YARDA_A_METROS = new BigDecimal("0.9144");
 
     private final InsumoRepository insumoRepository;
     private final InsumoCompraRepository insumoCompraRepository;
@@ -134,14 +135,18 @@ public class InsumoService {
     }
 
     private void aplicarCompraInput(InsumoCompra compra, CompraInput compraInput) {
-        BigDecimal precioUnitario = calcularPrecioUnitario(
+        BigDecimal contenidoTotalComprado = calcularContenidoTotalComprado(
                 compraInput.cantidadComprada(),
-                compraInput.cantidadMlComprados(),
-                compraInput.unidadMedida(),
-                compraInput.precioCompraTotal());
+                compraInput.contenidoPorUnidad(),
+                compraInput.unidadContenido(),
+                compraInput.unidadMedida());
+        BigDecimal precioUnitario = calcularPrecioUnitario(compraInput, contenidoTotalComprado);
         compra.setFechaCompra(compraInput.fechaCompra());
         compra.setCantidadComprada(compraInput.cantidadComprada().setScale(3, RoundingMode.HALF_UP));
         compra.setCantidadMlComprados(scaleOptional(compraInput.cantidadMlComprados(), 4));
+        compra.setContenidoPorUnidad(scaleOptional(compraInput.contenidoPorUnidad(), 4));
+        compra.setUnidadContenido(compraInput.unidadContenido());
+        compra.setContenidoTotalComprado(scaleOptional(contenidoTotalComprado, 4));
         compra.setUnidadMedida(compraInput.unidadMedida());
         compra.setPrecioCompraTotal(compraInput.precioCompraTotal().setScale(2, RoundingMode.HALF_UP));
         compra.setPrecioUnitario(precioUnitario);
@@ -170,6 +175,9 @@ public class InsumoService {
         insumo.setUnidadMedida(compra.getUnidadMedida());
         insumo.setCantidadComprada(compra.getCantidadComprada());
         insumo.setCantidadMlComprados(compra.getCantidadMlComprados());
+        insumo.setContenidoPorUnidad(compra.getContenidoPorUnidad());
+        insumo.setUnidadContenido(compra.getUnidadContenido());
+        insumo.setContenidoTotalComprado(compra.getContenidoTotalComprado());
         insumo.setAncho(compra.getAncho());
         insumo.setUnidadAncho(compra.getUnidadAncho());
         insumo.setAlto(compra.getAlto());
@@ -186,11 +194,15 @@ public class InsumoService {
     }
 
     private CompraInput buildCompraInput(InsumoRequest insumoRequest) {
+        String unidadMedida = normalizarUnidadMedida(insumoRequest.unidadMedida());
+        boolean esCono = isUnidadCono(unidadMedida);
         return new CompraInput(
                 insumoRequest.fechaCompra(),
                 insumoRequest.cantidadComprada(),
                 insumoRequest.cantidadMlComprados(),
-                normalizarUnidadMedida(insumoRequest.unidadMedida()),
+                esCono ? insumoRequest.contenidoPorUnidad() : null,
+                esCono ? normalizarUnidadContenido(insumoRequest.unidadContenido()) : null,
+                unidadMedida,
                 resolverPrecioCompraTotal(insumoRequest.precioCompraTotal(), insumoRequest.precioNeto(), insumoRequest.iva()),
                 insumoRequest.precioNeto(),
                 insumoRequest.iva(),
@@ -205,11 +217,15 @@ public class InsumoService {
     }
 
     private CompraInput buildCompraInput(InsumoCompraRequest compraRequest) {
+        String unidadMedida = normalizarUnidadMedida(compraRequest.unidadMedida());
+        boolean esCono = isUnidadCono(unidadMedida);
         return new CompraInput(
                 compraRequest.fechaCompra(),
                 compraRequest.cantidadComprada(),
                 compraRequest.cantidadMlComprados(),
-                normalizarUnidadMedida(compraRequest.unidadMedida()),
+                esCono ? compraRequest.contenidoPorUnidad() : null,
+                esCono ? normalizarUnidadContenido(compraRequest.unidadContenido()) : null,
+                unidadMedida,
                 compraRequest.precioCompraTotal(),
                 compraRequest.precioNeto(),
                 compraRequest.iva(),
@@ -237,6 +253,14 @@ public class InsumoService {
                 && (compraInput.cantidadMlComprados() == null
                         || compraInput.cantidadMlComprados().compareTo(BigDecimal.ZERO) <= 0)) {
             throw new IllegalArgumentException("La cantidad de ML comprados es obligatoria para insumos medidos en ML.");
+        }
+        if (isUnidadCono(compraInput.unidadMedida())) {
+            if (compraInput.contenidoPorUnidad() == null || compraInput.contenidoPorUnidad().compareTo(BigDecimal.ZERO) <= 0) {
+                throw new IllegalArgumentException("El contenido por cono es obligatorio para insumos medidos como cono.");
+            }
+            if (compraInput.unidadContenido() == null || compraInput.unidadContenido().isBlank()) {
+                throw new IllegalArgumentException("La unidad de contenido es obligatoria para insumos medidos como cono.");
+            }
         }
         if (compraInput.precioCompraTotal() == null || compraInput.precioCompraTotal().compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("El precio total de compra debe ser mayor a cero.");
@@ -311,6 +335,15 @@ public class InsumoService {
     private boolean tieneCambioDeCompra(InsumoCompra compraActual, CompraInput compraInput) {
         return !sameBigDecimal(compraActual.getCantidadComprada(), compraInput.cantidadComprada())
                 || !sameBigDecimal(compraActual.getCantidadMlComprados(), compraInput.cantidadMlComprados())
+                || !sameBigDecimal(compraActual.getContenidoPorUnidad(), compraInput.contenidoPorUnidad())
+                || !Objects.equals(normalizarUnidadContenido(compraActual.getUnidadContenido()), compraInput.unidadContenido())
+                || !sameBigDecimal(
+                        compraActual.getContenidoTotalComprado(),
+                        calcularContenidoTotalComprado(
+                                compraInput.cantidadComprada(),
+                                compraInput.contenidoPorUnidad(),
+                                compraInput.unidadContenido(),
+                                compraInput.unidadMedida()))
                 || !Objects.equals(normalizarUnidadMedida(compraActual.getUnidadMedida()), compraInput.unidadMedida())
                 || !sameBigDecimal(compraActual.getPrecioCompraTotal(), compraInput.precioCompraTotal())
                 || !sameBigDecimal(compraActual.getPrecioNeto(), compraInput.precioNeto())
@@ -334,13 +367,34 @@ public class InsumoService {
         return null;
     }
 
-    private BigDecimal calcularPrecioUnitario(
+    private BigDecimal calcularPrecioUnitario(CompraInput compraInput, BigDecimal contenidoTotalComprado) {
+        BigDecimal divisor;
+        if (isUnidadMililitros(compraInput.unidadMedida())) {
+            divisor = compraInput.cantidadMlComprados();
+        } else if (isUnidadCono(compraInput.unidadMedida())) {
+            divisor = contenidoTotalComprado;
+        } else {
+            divisor = compraInput.cantidadComprada();
+        }
+
+        return compraInput.precioCompraTotal().divide(divisor, 4, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal calcularContenidoTotalComprado(
             BigDecimal cantidadComprada,
-            BigDecimal cantidadMlComprados,
-            String unidadMedida,
-            BigDecimal precioCompraTotal) {
-        BigDecimal divisor = isUnidadMililitros(unidadMedida) ? cantidadMlComprados : cantidadComprada;
-        return precioCompraTotal.divide(divisor, 4, RoundingMode.HALF_UP);
+            BigDecimal contenidoPorUnidad,
+            String unidadContenido,
+            String unidadMedida) {
+        if (!isUnidadCono(unidadMedida) || cantidadComprada == null || contenidoPorUnidad == null) {
+            return null;
+        }
+
+        BigDecimal contenidoNormalizado = convertirContenidoAMetros(contenidoPorUnidad, unidadContenido);
+        if (contenidoNormalizado == null) {
+            return null;
+        }
+
+        return cantidadComprada.multiply(contenidoNormalizado);
     }
 
     private BigDecimal calcularVariacionPorcentual(BigDecimal precioAnterior, BigDecimal precioActual) {
@@ -403,6 +457,15 @@ public class InsumoService {
         return comparable.equals("ml") || comparable.equals("mililitro") || comparable.equals("mililitros");
     }
 
+    private boolean isUnidadCono(String unidadMedida) {
+        String valorNormalizado = normalizarUnidadMedida(unidadMedida);
+        if (valorNormalizado == null) {
+            return false;
+        }
+
+        return valorNormalizado.toLowerCase(Locale.ROOT).equals("cono");
+    }
+
     private String normalizarTipoDocumento(String tipoDocumento) {
         String valorNormalizado = normalizarTexto(tipoDocumento);
         if (valorNormalizado == null) {
@@ -415,6 +478,32 @@ public class InsumoService {
     private String normalizarUnidadDimension(String unidadDimension) {
         String valorNormalizado = normalizarTexto(unidadDimension);
         return valorNormalizado == null ? null : valorNormalizado.toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizarUnidadContenido(String unidadContenido) {
+        String valorNormalizado = normalizarTexto(unidadContenido);
+        return valorNormalizado == null ? null : valorNormalizado.toLowerCase(Locale.ROOT);
+    }
+
+    private BigDecimal convertirContenidoAMetros(BigDecimal valor, String unidadContenido) {
+        if (valor == null) {
+            return null;
+        }
+
+        String unidad = normalizarUnidadContenido(unidadContenido);
+        if (unidad == null) {
+            return null;
+        }
+
+        if (unidad.equals("m") || unidad.equals("metro") || unidad.equals("metros")) {
+            return valor;
+        }
+
+        if (unidad.equals("yd") || unidad.equals("yarda") || unidad.equals("yardas")) {
+            return valor.multiply(FACTOR_YARDA_A_METROS);
+        }
+
+        return null;
     }
 
     private InsumoResponse toResponse(Insumo insumo) {
@@ -430,6 +519,9 @@ public class InsumoService {
                 insumo.getUnidadMedida(),
                 insumo.getCantidadComprada(),
                 insumo.getCantidadMlComprados(),
+                insumo.getContenidoPorUnidad(),
+                insumo.getUnidadContenido(),
+                insumo.getContenidoTotalComprado(),
                 insumo.getAncho(),
                 insumo.getUnidadAncho(),
                 insumo.getAlto(),
@@ -461,6 +553,9 @@ public class InsumoService {
                 compra.getFechaCompra(),
                 compra.getCantidadComprada(),
                 compra.getCantidadMlComprados(),
+                compra.getContenidoPorUnidad(),
+                compra.getUnidadContenido(),
+                compra.getContenidoTotalComprado(),
                 compra.getUnidadMedida(),
                 compra.getPrecioCompraTotal(),
                 compra.getPrecioUnitario(),
@@ -492,6 +587,8 @@ public class InsumoService {
             LocalDate fechaCompra,
             BigDecimal cantidadComprada,
             BigDecimal cantidadMlComprados,
+            BigDecimal contenidoPorUnidad,
+            String unidadContenido,
             String unidadMedida,
             BigDecimal precioCompraTotal,
             BigDecimal precioNeto,

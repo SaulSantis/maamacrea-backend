@@ -15,6 +15,10 @@ public record InsumoCompraRequest(
                 BigDecimal cantidadComprada,
         @Positive(message = "La cantidad de ML comprados debe ser mayor a cero.")
                 BigDecimal cantidadMlComprados,
+        @Positive(message = "El contenido por unidad debe ser mayor a cero.")
+                BigDecimal contenidoPorUnidad,
+        @Size(max = 20, message = "La unidad del contenido no puede superar los 20 caracteres.")
+                String unidadContenido,
         @NotBlank(message = "La unidad de medida es obligatoria.")
                 @Size(max = 40, message = "La unidad de medida no puede superar los 40 caracteres.")
                 String unidadMedida,
