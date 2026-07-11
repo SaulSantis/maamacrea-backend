@@ -99,9 +99,14 @@ public class VentaService {
     @Transactional
     public VentaResponse actualizarImagenDiseno(Long id, MultipartFile file) {
         Venta venta = obtenerEntidad(id);
-        String imagenDisenoUrl = ventaImagenStorageService.guardarImagen(id, file);
+        String imagenDisenoUrl = ventaImagenStorageService.guardarImagen(id, venta.getCodigoVendido(), file);
         venta.setImagenDisenoUrl(imagenDisenoUrl);
         return toResponse(ventaRepository.save(venta));
+    }
+
+    public VentaImagenStorageService.StoredVentaDesignFile obtenerImagenDiseno(Long id) {
+        Venta venta = obtenerEntidad(id);
+        return ventaImagenStorageService.cargarImagen(venta.getImagenDisenoUrl());
     }
 
     @Transactional

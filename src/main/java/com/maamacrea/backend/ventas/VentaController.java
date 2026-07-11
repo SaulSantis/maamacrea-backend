@@ -2,6 +2,8 @@ package com.maamacrea.backend.ventas;
 
 import jakarta.validation.Valid;
 import java.util.List;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -41,6 +43,15 @@ public class VentaController {
     @GetMapping("/{id}")
     public VentaResponse buscarPorId(@PathVariable Long id) {
         return ventaService.buscarPorId(id);
+    }
+
+    @GetMapping("/{id}/imagen-diseno")
+    public ResponseEntity<Resource> descargarImagenDiseno(@PathVariable Long id) {
+        VentaImagenStorageService.StoredVentaDesignFile storedFile = ventaService.obtenerImagenDiseno(id);
+        return ResponseEntity.ok()
+                .contentType(storedFile.mediaType())
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + storedFile.fileName() + "\"")
+                .body(storedFile.resource());
     }
 
     @PostMapping

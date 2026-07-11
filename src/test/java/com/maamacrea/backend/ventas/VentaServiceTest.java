@@ -237,14 +237,14 @@ class VentaServiceTest {
         MockMultipartFile file = new MockMultipartFile("file", "cojin-amor.webp", "image/webp", new byte[] {1, 2, 3});
 
         when(ventaRepository.findById(9L)).thenReturn(Optional.of(venta));
-        when(ventaImagenStorageService.guardarImagen(9L, file))
-                .thenReturn("uploads/imagenes-ventas/venta-9-cojin-amor.webp");
+        when(ventaImagenStorageService.guardarImagen(9L, "COJ-AMO-001", file))
+                .thenReturn("uploads/ventas/disenos/COJ-AMO-001-20260711-010000.webp");
         when(ventaRepository.save(any(Venta.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         VentaResponse response = ventaService.actualizarImagenDiseno(9L, file);
 
-        assertThat(venta.getImagenDisenoUrl()).isEqualTo("uploads/imagenes-ventas/venta-9-cojin-amor.webp");
-        assertThat(response.imagenDisenoUrl()).isEqualTo("uploads/imagenes-ventas/venta-9-cojin-amor.webp");
+        assertThat(venta.getImagenDisenoUrl()).isEqualTo("uploads/ventas/disenos/COJ-AMO-001-20260711-010000.webp");
+        assertThat(response.imagenDisenoUrl()).isEqualTo("uploads/ventas/disenos/COJ-AMO-001-20260711-010000.webp");
     }
 
     @Test
@@ -256,13 +256,13 @@ class VentaServiceTest {
         MockMultipartFile file = new MockMultipartFile("file", "cojin-personalizado.pdf", "application/pdf", new byte[] {1, 2, 3});
 
         when(ventaRepository.findById(10L)).thenReturn(Optional.of(venta));
-        when(ventaImagenStorageService.guardarImagen(10L, file))
-                .thenReturn("uploads/imagenes-ventas/venta-10-cojin-personalizado.pdf");
+        when(ventaImagenStorageService.guardarImagen(10L, "COJ-PER-001", file))
+                .thenReturn("uploads/ventas/disenos/COJ-PER-001-20260711-010500.pdf");
         when(ventaRepository.save(any(Venta.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         VentaResponse response = ventaService.actualizarImagenDiseno(10L, file);
 
-        assertThat(venta.getImagenDisenoUrl()).isEqualTo("uploads/imagenes-ventas/venta-10-cojin-personalizado.pdf");
-        assertThat(response.imagenDisenoUrl()).isEqualTo("uploads/imagenes-ventas/venta-10-cojin-personalizado.pdf");
+        assertThat(venta.getImagenDisenoUrl()).isEqualTo("uploads/ventas/disenos/COJ-PER-001-20260711-010500.pdf");
+        assertThat(response.imagenDisenoUrl()).isEqualTo("uploads/ventas/disenos/COJ-PER-001-20260711-010500.pdf");
     }
 }

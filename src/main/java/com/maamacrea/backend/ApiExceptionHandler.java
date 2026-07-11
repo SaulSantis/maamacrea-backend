@@ -67,7 +67,7 @@ public class ApiExceptionHandler {
             MaxUploadSizeExceededException exception, HttpServletRequest request) {
         return buildResponse(
                 HttpStatus.BAD_REQUEST,
-                "El comprobante supera el tamano maximo permitido.",
+                "El archivo supera el tamano maximo permitido.",
                 request.getRequestURI(),
                 null);
     }
