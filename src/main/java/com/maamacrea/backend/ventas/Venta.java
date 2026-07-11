@@ -53,6 +53,9 @@ public class Venta {
     @Column(name = "referencia_diseno", length = 200)
     private String referenciaDiseno;
 
+    @Column(name = "imagen_diseno_url", length = 500)
+    private String imagenDisenoUrl;
+
     @Column(nullable = false, precision = 12, scale = 3)
     private BigDecimal cantidad;
 

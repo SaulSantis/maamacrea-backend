@@ -20,6 +20,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mock.web.MockMultipartFile;
 
 @ExtendWith(MockitoExtension.class)
 class VentaServiceTest {
@@ -29,6 +30,9 @@ class VentaServiceTest {
 
     @Mock
     private ProductoService productoService;
+
+    @Mock
+    private VentaImagenStorageService ventaImagenStorageService;
 
     @InjectMocks
     private VentaService ventaService;
@@ -173,5 +177,24 @@ class VentaServiceTest {
 
         assertThat(response.estadoPedido()).isEqualTo(VentaEstadoPedido.ENVIO);
         assertThat(venta.getEstadoPedido()).isEqualTo(VentaEstadoPedido.ENVIO);
+    }
+
+    @Test
+    void actualizaImagenDisenoDeVentaExistente() {
+        Venta venta = new Venta();
+        venta.setId(9L);
+        venta.setCodigoVendido("COJ-AMO-001");
+
+        MockMultipartFile file = new MockMultipartFile("file", "cojin-amor.webp", "image/webp", new byte[] {1, 2, 3});
+
+        when(ventaRepository.findById(9L)).thenReturn(Optional.of(venta));
+        when(ventaImagenStorageService.guardarImagen(9L, file))
+                .thenReturn("uploads/imagenes-ventas/venta-9-cojin-amor.webp");
+        when(ventaRepository.save(any(Venta.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        VentaResponse response = ventaService.actualizarImagenDiseno(9L, file);
+
+        assertThat(venta.getImagenDisenoUrl()).isEqualTo("uploads/imagenes-ventas/venta-9-cojin-amor.webp");
+        assertThat(response.imagenDisenoUrl()).isEqualTo("uploads/imagenes-ventas/venta-9-cojin-amor.webp");
     }
 }

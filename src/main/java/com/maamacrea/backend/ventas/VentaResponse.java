@@ -14,6 +14,7 @@ public record VentaResponse(
         String codigoVendido,
         String coleccionDiseno,
         String referenciaDiseno,
+        String imagenDisenoUrl,
         BigDecimal cantidad,
         BigDecimal precioUnitario,
         BigDecimal totalVenta,

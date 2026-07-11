@@ -130,6 +130,7 @@ class ProductoServiceTest {
                 "COJ-PERS-001",
                 "Cojin 43x43",
                 ProductoTipo.COJIN_PERSONALIZADO,
+                new BigDecimal("9990"),
                 List.of(new ProductoInsumoCreateRequest(
                         1L,
                         new BigDecimal("1"),
@@ -142,6 +143,38 @@ class ProductoServiceTest {
         assertThat(response.insumos()).hasSize(1);
         assertThat(response.insumos().get(0).medidaUsadaTexto()).isEqualTo("43 x 43 cm");
         verify(productoInsumoRepository).save(any(ProductoInsumo.class));
+    }
+
+    @Test
+    void guardaPrecioVentaFinalAlCrearProducto() {
+        when(productoRepository.existsByCodigoIgnoreCase("COJ-PERS-010")).thenReturn(false);
+        when(productoRepository.save(any(Producto.class))).thenAnswer(invocation -> {
+            Producto producto = invocation.getArgument(0);
+            if (producto.getId() == null) {
+                producto.setId(10L);
+            }
+            return producto;
+        });
+        when(insumoRepository.findById(1L)).thenReturn(Optional.of(insumoTextil));
+        when(productoInsumoRepository.save(any(ProductoInsumo.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(productoInsumoRepository.findByProductoIdOrderByIdAsc(10L)).thenReturn(List.of());
+
+        productoService.crearProducto(new ProductoCreateRequest(
+                "COJ-PERS-010",
+                "Cojin premium",
+                ProductoTipo.COJIN_PERSONALIZADO,
+                new BigDecimal("11990"),
+                List.of(new ProductoInsumoCreateRequest(
+                        1L,
+                        new BigDecimal("1"),
+                        new BigDecimal("43"),
+                        new BigDecimal("43"),
+                        "No aplica",
+                        null))));
+
+        ArgumentCaptor<Producto> captor = ArgumentCaptor.forClass(Producto.class);
+        verify(productoRepository, times(2)).save(captor.capture());
+        assertThat(captor.getAllValues().get(0).getPrecioVenta()).isEqualByComparingTo("11990.00");
     }
 
     @Test
@@ -167,6 +200,7 @@ class ProductoServiceTest {
                 "COJ-PERS-001",
                 "Cojin 43x43",
                 ProductoTipo.COJIN_PERSONALIZADO,
+                new BigDecimal("9990"),
                 List.of(
                         new ProductoInsumoCreateRequest(
                                 1L,
@@ -222,6 +256,7 @@ class ProductoServiceTest {
                 "COJ-PERS-001",
                 "Cojin 43x43",
                 ProductoTipo.COJIN_PERSONALIZADO,
+                new BigDecimal("9990"),
                 List.of(new ProductoInsumoCreateRequest(
                         1L,
                         new BigDecimal("1"),
@@ -264,6 +299,7 @@ class ProductoServiceTest {
                 "COJ-PERS-002",
                 "Cojin 31x43",
                 ProductoTipo.COJIN_PERSONALIZADO,
+                new BigDecimal("9990"),
                 List.of(new ProductoInsumoCreateRequest(
                         1L,
                         new BigDecimal("2"),
@@ -313,6 +349,7 @@ class ProductoServiceTest {
                 "COJ-PERS-003",
                 "Cojin 40x40",
                 ProductoTipo.COJIN_PERSONALIZADO,
+                new BigDecimal("9990"),
                 List.of(new ProductoInsumoCreateRequest(
                         6L,
                         new BigDecimal("3"),
@@ -354,6 +391,7 @@ class ProductoServiceTest {
                 "COJ-PERS-003",
                 "Cojin sin largo",
                 ProductoTipo.COJIN_PERSONALIZADO,
+                new BigDecimal("9990"),
                 List.of(new ProductoInsumoCreateRequest(
                         1L,
                         new BigDecimal("1"),
@@ -399,6 +437,7 @@ class ProductoServiceTest {
                 "COJ-PER-001",
                 "Cojin Personalizado 40x40",
                 ProductoTipo.COJIN_PERSONALIZADO,
+                new BigDecimal("9990"),
                 List.of(
                         new ProductoInsumoCreateRequest(
                                 5L,
@@ -455,6 +494,7 @@ class ProductoServiceTest {
                 "COJ-PERS-004",
                 "Cojin sublimado",
                 ProductoTipo.COJIN_PERSONALIZADO,
+                new BigDecimal("9990"),
                 List.of(new ProductoInsumoCreateRequest(
                         4L,
                         new BigDecimal("0.8825"),
@@ -497,6 +537,7 @@ class ProductoServiceTest {
                 "COJ-PERS-005",
                 "Cojin sublimado",
                 ProductoTipo.COJIN_PERSONALIZADO,
+                new BigDecimal("9990"),
                 List.of(new ProductoInsumoCreateRequest(
                         4L,
                         new BigDecimal("0.8825"),
@@ -516,9 +557,28 @@ class ProductoServiceTest {
                         "COJ-PERS-001",
                         "Cojin 43x43",
                         ProductoTipo.COJIN_PERSONALIZADO,
+                        new BigDecimal("9990"),
                         List.of())))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Debes asociar al menos un insumo al producto.");
+    }
+
+    @Test
+    void fallaSiFaltaElValorDeVentaFinal() {
+        assertThatThrownBy(() -> productoService.crearProducto(new ProductoCreateRequest(
+                        "COJ-PERS-001",
+                        "Cojin 43x43",
+                        ProductoTipo.COJIN_PERSONALIZADO,
+                        null,
+                        List.of(new ProductoInsumoCreateRequest(
+                                1L,
+                                new BigDecimal("1"),
+                                null,
+                                null,
+                                "No aplica",
+                                null)))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("El valor de venta final del producto es obligatorio.");
     }
 
     @Test
@@ -533,6 +593,7 @@ class ProductoServiceTest {
                         "COJ-PERS-001",
                         "Cojin 43x43",
                         ProductoTipo.COJIN_PERSONALIZADO,
+                        new BigDecimal("9990"),
                         List.of(new ProductoInsumoCreateRequest(
                                 999L,
                                 new BigDecimal("1"),
@@ -550,6 +611,7 @@ class ProductoServiceTest {
                         "COJ-PERS-001",
                         "Cojin 43x43",
                         ProductoTipo.COJIN_PERSONALIZADO,
+                        new BigDecimal("9990"),
                         List.of(new ProductoInsumoCreateRequest(
                                 1L,
                                 BigDecimal.ZERO,
@@ -577,6 +639,7 @@ class ProductoServiceTest {
                 "COJ-PERS-001",
                 "Cojin 43x43",
                 ProductoTipo.COJIN_PERSONALIZADO,
+                new BigDecimal("9990"),
                 List.of(new ProductoInsumoCreateRequest(
                         1L,
                         new BigDecimal("1.25"),

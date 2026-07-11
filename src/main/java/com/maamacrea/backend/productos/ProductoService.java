@@ -54,6 +54,7 @@ public class ProductoService {
                         producto.getCodigo(),
                         producto.getNombre(),
                         producto.getTipoProducto(),
+                        producto.getPrecioVenta(),
                         productoInsumoRepository.findByProductoId(producto.getId()).size(),
                         producto.getCreatedAt()))
                 .toList();
@@ -76,6 +77,7 @@ public class ProductoService {
         producto.setCodigo(request.codigo().trim());
         producto.setNombre(request.nombre().trim());
         producto.setTipoProducto(request.tipoProducto());
+        producto.setPrecioVenta(request.precioVenta().setScale(2, RoundingMode.HALF_UP));
 
         Producto guardado = productoRepository.save(producto);
         guardarRelaciones(guardado, request.insumos());
@@ -96,6 +98,7 @@ public class ProductoService {
         producto.setCodigo(codigoNormalizado);
         producto.setNombre(request.nombre().trim());
         producto.setTipoProducto(request.tipoProducto());
+        producto.setPrecioVenta(request.precioVenta().setScale(2, RoundingMode.HALF_UP));
 
         Producto guardado = productoRepository.save(producto);
         productoInsumoRepository.deleteByProductoId(productoId);
@@ -772,6 +775,12 @@ public class ProductoService {
         }
         if (request.tipoProducto() == null) {
             throw new IllegalArgumentException("El tipo de producto es obligatorio.");
+        }
+        if (request.precioVenta() == null) {
+            throw new IllegalArgumentException("El valor de venta final del producto es obligatorio.");
+        }
+        if (request.precioVenta().compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("El valor de venta final del producto no puede ser negativo.");
         }
         if (request.insumos() == null || request.insumos().isEmpty()) {
             throw new IllegalArgumentException("Debes asociar al menos un insumo al producto.");

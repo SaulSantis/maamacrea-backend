@@ -1,10 +1,12 @@
 package com.maamacrea.backend.productos;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import java.math.BigDecimal;
 import java.util.List;
 
 public record ProductoCreateRequest(
@@ -18,6 +20,10 @@ public record ProductoCreateRequest(
 
         @NotNull(message = "El tipo de producto es obligatorio.")
         ProductoTipo tipoProducto,
+
+        @NotNull(message = "El valor de venta final del producto es obligatorio.")
+        @DecimalMin(value = "0.00", inclusive = true, message = "El valor de venta final del producto no puede ser negativo.")
+        BigDecimal precioVenta,
 
         @NotEmpty(message = "Debes asociar al menos un insumo al producto.")
         @Size(max = 100, message = "El producto no puede tener mas de 100 insumos asociados en una sola solicitud.")

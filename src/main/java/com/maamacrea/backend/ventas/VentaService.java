@@ -10,6 +10,7 @@ import java.util.List;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 @Service
 @Transactional(readOnly = true)
@@ -17,10 +18,15 @@ public class VentaService {
 
     private final VentaRepository ventaRepository;
     private final ProductoService productoService;
+    private final VentaImagenStorageService ventaImagenStorageService;
 
-    public VentaService(VentaRepository ventaRepository, ProductoService productoService) {
+    public VentaService(
+            VentaRepository ventaRepository,
+            ProductoService productoService,
+            VentaImagenStorageService ventaImagenStorageService) {
         this.ventaRepository = ventaRepository;
         this.productoService = productoService;
+        this.ventaImagenStorageService = ventaImagenStorageService;
     }
 
     public List<VentaResponse> listarTodas() {
@@ -48,6 +54,14 @@ public class VentaService {
 
         Venta venta = obtenerEntidad(id);
         venta.setEstadoPedido(request.estadoPedido());
+        return toResponse(ventaRepository.save(venta));
+    }
+
+    @Transactional
+    public VentaResponse actualizarImagenDiseno(Long id, MultipartFile file) {
+        Venta venta = obtenerEntidad(id);
+        String imagenDisenoUrl = ventaImagenStorageService.guardarImagen(id, file);
+        venta.setImagenDisenoUrl(imagenDisenoUrl);
         return toResponse(ventaRepository.save(venta));
     }
 
@@ -165,6 +179,7 @@ public class VentaService {
                 venta.getCodigoVendido(),
                 venta.getColeccionDiseno(),
                 venta.getReferenciaDiseno(),
+                venta.getImagenDisenoUrl(),
                 venta.getCantidad(),
                 venta.getPrecioUnitario(),
                 venta.getTotalVenta(),
