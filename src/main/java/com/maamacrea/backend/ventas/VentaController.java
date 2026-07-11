@@ -46,11 +46,14 @@ public class VentaController {
     }
 
     @GetMapping("/{id}/imagen-diseno")
-    public ResponseEntity<Resource> descargarImagenDiseno(@PathVariable Long id) {
+    public ResponseEntity<Resource> descargarImagenDiseno(
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "false") boolean download) {
         VentaImagenStorageService.StoredVentaDesignFile storedFile = ventaService.obtenerImagenDiseno(id);
+        String dispositionType = download ? "attachment" : "inline";
         return ResponseEntity.ok()
                 .contentType(storedFile.mediaType())
-                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + storedFile.fileName() + "\"")
+                .header(HttpHeaders.CONTENT_DISPOSITION, dispositionType + "; filename=\"" + storedFile.fileName() + "\"")
                 .body(storedFile.resource());
     }
 

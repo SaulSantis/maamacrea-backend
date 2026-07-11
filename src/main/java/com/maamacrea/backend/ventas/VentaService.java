@@ -7,6 +7,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,6 +16,12 @@ import org.springframework.web.multipart.MultipartFile;
 @Service
 @Transactional(readOnly = true)
 public class VentaService {
+
+    private static final Set<VentaEstadoPedido> ESTADOS_ACTIVOS = Set.of(
+            VentaEstadoPedido.PAGO_CONFIRMADO,
+            VentaEstadoPedido.DISENO_Y_CONFECCION,
+            VentaEstadoPedido.ENTREGADO_A_CORREOS,
+            VentaEstadoPedido.RECIBIDO_POR_CLIENTE);
 
     private final VentaRepository ventaRepository;
     private final ProductoService productoService;
@@ -90,6 +97,7 @@ public class VentaService {
         if (request == null || request.estadoPedido() == null) {
             throw new IllegalArgumentException("El estado del pedido es obligatorio.");
         }
+        validarEstadoActivo(request.estadoPedido());
 
         Venta venta = obtenerEntidad(id);
         venta.setEstadoPedido(request.estadoPedido());
@@ -201,11 +209,18 @@ public class VentaService {
         if (request.estadoPedido() == null) {
             throw new IllegalArgumentException("El estado del pedido es obligatorio.");
         }
+        validarEstadoActivo(request.estadoPedido());
         if (request.fechaVenta() == null) {
             throw new IllegalArgumentException("La fecha de venta es obligatoria.");
         }
         if (request.valorEnvio() != null && request.valorEnvio().compareTo(BigDecimal.ZERO) < 0) {
             throw new IllegalArgumentException("El valor de envio no puede ser negativo.");
+        }
+    }
+
+    private void validarEstadoActivo(VentaEstadoPedido estadoPedido) {
+        if (!ESTADOS_ACTIVOS.contains(estadoPedido)) {
+            throw new IllegalArgumentException("El estado del pedido no es valido para esta etapa.");
         }
     }
 

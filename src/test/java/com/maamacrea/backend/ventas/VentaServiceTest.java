@@ -176,10 +176,10 @@ class VentaServiceTest {
         when(ventaRepository.save(any(Venta.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         VentaResponse response = ventaService.actualizarEstado(
-                9L, new VentaEstadoUpdateRequest(VentaEstadoPedido.ENVIO));
+                9L, new VentaEstadoUpdateRequest(VentaEstadoPedido.ENTREGADO_A_CORREOS));
 
-        assertThat(response.estadoPedido()).isEqualTo(VentaEstadoPedido.ENVIO);
-        assertThat(venta.getEstadoPedido()).isEqualTo(VentaEstadoPedido.ENVIO);
+        assertThat(response.estadoPedido()).isEqualTo(VentaEstadoPedido.ENTREGADO_A_CORREOS);
+        assertThat(venta.getEstadoPedido()).isEqualTo(VentaEstadoPedido.ENTREGADO_A_CORREOS);
     }
 
     @Test
@@ -218,7 +218,7 @@ class VentaServiceTest {
                         VentaMetodoPago.MERCADO_PAGO,
                         LocalDate.of(2026, 7, 11),
                         new BigDecimal("21980"),
-                        VentaEstadoPedido.CONFECCION,
+                        VentaEstadoPedido.DISENO_Y_CONFECCION,
                         LocalDate.of(2026, 7, 11)));
 
         assertThat(response.codigoVendido()).isEqualTo("COJ-AMO-002");
@@ -226,6 +226,14 @@ class VentaServiceTest {
         assertThat(response.totalVenta()).isEqualByComparingTo("21980.00");
         assertThat(venta.getCostoMaterialesSnapshot()).isEqualByComparingTo("1150.0000");
         assertThat(venta.getCostoReposicionSnapshot()).isEqualByComparingTo("1150.0000");
+    }
+
+    @Test
+    void rechazaEstadoNoActivoEnActualizacion() {
+        assertThatThrownBy(() -> ventaService.actualizarEstado(
+                        9L, new VentaEstadoUpdateRequest(VentaEstadoPedido.CANCELADO)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("El estado del pedido no es valido para esta etapa.");
     }
 
     @Test
