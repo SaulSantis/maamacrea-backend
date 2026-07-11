@@ -37,4 +37,9 @@ build/
 .env.*
 logs/
 *.log
-uploads/
+uploads/*
+!uploads/ventas/
+uploads/ventas/*
+!uploads/ventas/disenos/
+uploads/ventas/disenos/*
+!uploads/ventas/disenos/.gitkeep
