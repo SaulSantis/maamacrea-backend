@@ -30,12 +30,17 @@ public class VentaImagenStorageService {
 
     private final Path storageDirectory;
     private final Path uploadsRoot;
+    private final Path workingDirectory;
 
     public VentaImagenStorageService(
             @Value("${app.ventas.imagenes.upload-dir:uploads/ventas/disenos}")
                     String uploadDir) {
-        this.storageDirectory = Path.of(uploadDir).normalize();
-        this.uploadsRoot = Path.of("uploads").toAbsolutePath().normalize();
+        this.workingDirectory = Path.of("").toAbsolutePath().normalize();
+        Path configuredDirectory = Path.of(uploadDir).normalize();
+        this.storageDirectory = configuredDirectory.isAbsolute()
+                ? configuredDirectory
+                : workingDirectory.resolve(configuredDirectory).normalize();
+        this.uploadsRoot = resolverUploadsRoot(configuredDirectory);
     }
 
     public String guardarImagen(Long ventaId, String codigoVendido, MultipartFile file) {
@@ -80,7 +85,7 @@ public class VentaImagenStorageService {
                     safeOriginalName,
                     targetFile);
 
-            return targetFile.toString().replace('\\', '/');
+            return construirRutaRelativa(targetFile);
         } catch (IOException exception) {
             throw new IllegalStateException("No fue posible guardar el archivo del diseno vendido.", exception);
         }
@@ -92,10 +97,10 @@ public class VentaImagenStorageService {
         }
 
         try {
-            Path normalizedStoredPath = Path.of(storedPath).normalize();
+            Path normalizedStoredPath = Path.of(storedPath.replace('\\', '/')).normalize();
             Path absoluteFilePath = normalizedStoredPath.isAbsolute()
                     ? normalizedStoredPath
-                    : Path.of("").toAbsolutePath().resolve(normalizedStoredPath).normalize();
+                    : resolverRutaAbsoluta(normalizedStoredPath);
 
             if (!absoluteFilePath.startsWith(uploadsRoot)) {
                 throw new IllegalArgumentException("No fue posible acceder al archivo del diseno vendido.");
@@ -115,6 +120,56 @@ public class VentaImagenStorageService {
         } catch (InvalidPathException | IOException exception) {
             throw new IllegalStateException("No fue posible acceder al archivo del diseno vendido.", exception);
         }
+    }
+
+    private String construirRutaRelativa(Path targetFile) {
+        if (targetFile.startsWith(uploadsRoot)) {
+            Path relativePath = uploadsRoot.relativize(targetFile);
+            return "uploads/" + relativePath.toString().replace('\\', '/');
+        }
+
+        return targetFile.getFileName().toString();
+    }
+
+    private Path resolverUploadsRoot(Path configuredDirectory) {
+        if (!configuredDirectory.isAbsolute()) {
+            return workingDirectory.resolve("uploads").normalize();
+        }
+
+        for (int index = 0; index < storageDirectory.getNameCount(); index++) {
+            if (!"uploads".equalsIgnoreCase(storageDirectory.getName(index).toString())) {
+                continue;
+            }
+
+            Path uploadsPath = storageDirectory.getRoot();
+            if (uploadsPath == null) {
+                uploadsPath = Path.of("");
+            }
+
+            for (int nameIndex = 0; nameIndex <= index; nameIndex++) {
+                uploadsPath = uploadsPath.resolve(storageDirectory.getName(nameIndex).toString());
+            }
+
+            return uploadsPath.normalize();
+        }
+
+        Path parentDirectory = storageDirectory.getParent();
+        return parentDirectory == null ? storageDirectory : parentDirectory.normalize();
+    }
+
+    private Path resolverRutaAbsoluta(Path storedPath) {
+        if (storedPath.getNameCount() == 0) {
+            return storageDirectory;
+        }
+
+        if ("uploads".equalsIgnoreCase(storedPath.getName(0).toString())) {
+            Path relativePathInsideUploads = storedPath.getNameCount() == 1
+                    ? Path.of("")
+                    : storedPath.subpath(1, storedPath.getNameCount());
+            return uploadsRoot.resolve(relativePathInsideUploads).normalize();
+        }
+
+        return storageDirectory.resolve(storedPath).normalize();
     }
 
     private String obtenerExtension(String fileName) {
