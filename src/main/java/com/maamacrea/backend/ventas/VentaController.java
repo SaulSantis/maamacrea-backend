@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -45,6 +46,11 @@ public class VentaController {
     @PostMapping
     public ResponseEntity<VentaResponse> crear(@Valid @RequestBody VentaRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ventaService.crear(request));
+    }
+
+    @PutMapping("/{id}")
+    public VentaResponse actualizar(@PathVariable Long id, @Valid @RequestBody VentaRequest request) {
+        return ventaService.actualizar(id, request);
     }
 
     @PostMapping(path = "/{id}/imagen-diseno", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

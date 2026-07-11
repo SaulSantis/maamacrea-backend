@@ -24,6 +24,7 @@ public record VentaResponse(
         String clienteTelefono,
         String clienteEmail,
         String clienteDireccion,
+        String referenciasDireccion,
         String clienteComuna,
         BigDecimal valorEnvio,
         VentaMetodoPago metodoPago,

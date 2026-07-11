@@ -83,6 +83,9 @@ public class Venta {
     @Column(name = "cliente_direccion", columnDefinition = "TEXT")
     private String clienteDireccion;
 
+    @Column(name = "referencias_direccion", columnDefinition = "TEXT")
+    private String referenciasDireccion;
+
     @Column(name = "cliente_comuna", length = 120)
     private String clienteComuna;
 

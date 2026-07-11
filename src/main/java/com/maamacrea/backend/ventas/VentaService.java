@@ -47,6 +47,45 @@ public class VentaService {
     }
 
     @Transactional
+    public VentaResponse actualizar(Long id, VentaRequest request) {
+        validarRequest(request);
+
+        Venta venta = obtenerEntidad(id);
+        if (!venta.getProductoId().equals(request.productoId())) {
+            throw new IllegalArgumentException("No es posible cambiar el producto base de una venta existente.");
+        }
+
+        BigDecimal cantidad = request.cantidad().setScale(3, RoundingMode.HALF_UP);
+        BigDecimal precioUnitario = request.precioUnitario().setScale(2, RoundingMode.HALF_UP);
+        BigDecimal totalVenta = request.totalVenta().setScale(2, RoundingMode.HALF_UP);
+        BigDecimal montoPagado = request.montoPagado().setScale(2, RoundingMode.HALF_UP);
+        BigDecimal valorEnvio = valorOZero(request.valorEnvio(), BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
+
+        venta.setCodigoVendido(normalizarTextoObligatorio(request.codigoVendido()));
+        venta.setColeccionDiseno(normalizarTexto(request.coleccionDiseno()));
+        venta.setReferenciaDiseno(normalizarTexto(request.referenciaDiseno()));
+        venta.setCantidad(cantidad);
+        venta.setPrecioUnitario(precioUnitario);
+        venta.setTotalVenta(totalVenta);
+        venta.setClienteNombre(normalizarTextoObligatorio(request.clienteNombre()));
+        venta.setClienteApellidos(normalizarTexto(request.clienteApellidos()));
+        venta.setClienteRut(normalizarTexto(request.clienteRut()));
+        venta.setClienteTelefono(normalizarTextoObligatorio(request.clienteTelefono()));
+        venta.setClienteEmail(normalizarTexto(request.clienteEmail()));
+        venta.setClienteDireccion(normalizarTexto(request.clienteDireccion()));
+        venta.setReferenciasDireccion(normalizarTexto(request.referenciasDireccion()));
+        venta.setClienteComuna(normalizarTexto(request.clienteComuna()));
+        venta.setValorEnvio(valorEnvio);
+        venta.setMetodoPago(request.metodoPago());
+        venta.setFechaPago(request.fechaPago());
+        venta.setMontoPagado(montoPagado);
+        venta.setEstadoPedido(request.estadoPedido());
+        venta.setFechaVenta(request.fechaVenta());
+
+        return toResponse(ventaRepository.save(venta));
+    }
+
+    @Transactional
     public VentaResponse actualizarEstado(Long id, VentaEstadoUpdateRequest request) {
         if (request == null || request.estadoPedido() == null) {
             throw new IllegalArgumentException("El estado del pedido es obligatorio.");
@@ -102,6 +141,7 @@ public class VentaService {
         venta.setClienteTelefono(normalizarTextoObligatorio(request.clienteTelefono()));
         venta.setClienteEmail(normalizarTexto(request.clienteEmail()));
         venta.setClienteDireccion(normalizarTexto(request.clienteDireccion()));
+        venta.setReferenciasDireccion(normalizarTexto(request.referenciasDireccion()));
         venta.setClienteComuna(normalizarTexto(request.clienteComuna()));
         venta.setValorEnvio(valorEnvio);
         venta.setMetodoPago(request.metodoPago());
@@ -189,6 +229,7 @@ public class VentaService {
                 venta.getClienteTelefono(),
                 venta.getClienteEmail(),
                 venta.getClienteDireccion(),
+                venta.getReferenciasDireccion(),
                 venta.getClienteComuna(),
                 venta.getValorEnvio(),
                 venta.getMetodoPago(),

@@ -77,6 +77,7 @@ class VentaServiceTest {
                 "+56912345678",
                 null,
                 null,
+                "Dejar en conserjeria",
                 "Santiago",
                 new BigDecimal("0"),
                 VentaMetodoPago.TRANSFERENCIA,
@@ -153,6 +154,7 @@ class VentaServiceTest {
                         null,
                         null,
                         null,
+                        null,
                         BigDecimal.ZERO,
                         VentaMetodoPago.TRANSFERENCIA,
                         LocalDate.of(2026, 7, 10),
@@ -167,6 +169,7 @@ class VentaServiceTest {
     void actualizaEstadoDeVentaExistente() {
         Venta venta = new Venta();
         venta.setId(9L);
+        venta.setProductoId(1L);
         venta.setEstadoPedido(VentaEstadoPedido.PAGO_CONFIRMADO);
 
         when(ventaRepository.findById(9L)).thenReturn(Optional.of(venta));
@@ -177,6 +180,52 @@ class VentaServiceTest {
 
         assertThat(response.estadoPedido()).isEqualTo(VentaEstadoPedido.ENVIO);
         assertThat(venta.getEstadoPedido()).isEqualTo(VentaEstadoPedido.ENVIO);
+    }
+
+    @Test
+    void actualizaVentaExistenteSinCambiarSnapshots() {
+        Venta venta = new Venta();
+        venta.setId(9L);
+        venta.setProductoId(1L);
+        venta.setCostoMaterialesSnapshot(new BigDecimal("1150.0000"));
+        venta.setCostoReposicionSnapshot(new BigDecimal("1150.0000"));
+        venta.setCostoTotalSnapshot(new BigDecimal("1150.0000"));
+        venta.setValorVentaSnapshot(new BigDecimal("9990.00"));
+        venta.setGananciaDirectaSnapshot(new BigDecimal("8840.00"));
+
+        when(ventaRepository.findById(9L)).thenReturn(Optional.of(venta));
+        when(ventaRepository.save(any(Venta.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        VentaResponse response = ventaService.actualizar(
+                9L,
+                new VentaRequest(
+                        1L,
+                        "COJ-AMO-002",
+                        "COJ-AMO",
+                        "Cojin amor pareja modelo 002",
+                        new BigDecimal("2"),
+                        new BigDecimal("10990"),
+                        new BigDecimal("21980"),
+                        "Camila",
+                        "Perez",
+                        null,
+                        "+56912345678",
+                        null,
+                        "Pasaje 123",
+                        "Casa azul, porton negro",
+                        "Santiago",
+                        new BigDecimal("3120"),
+                        VentaMetodoPago.MERCADO_PAGO,
+                        LocalDate.of(2026, 7, 11),
+                        new BigDecimal("21980"),
+                        VentaEstadoPedido.CONFECCION,
+                        LocalDate.of(2026, 7, 11)));
+
+        assertThat(response.codigoVendido()).isEqualTo("COJ-AMO-002");
+        assertThat(response.referenciasDireccion()).isEqualTo("Casa azul, porton negro");
+        assertThat(response.totalVenta()).isEqualByComparingTo("21980.00");
+        assertThat(venta.getCostoMaterialesSnapshot()).isEqualByComparingTo("1150.0000");
+        assertThat(venta.getCostoReposicionSnapshot()).isEqualByComparingTo("1150.0000");
     }
 
     @Test
@@ -196,5 +245,24 @@ class VentaServiceTest {
 
         assertThat(venta.getImagenDisenoUrl()).isEqualTo("uploads/imagenes-ventas/venta-9-cojin-amor.webp");
         assertThat(response.imagenDisenoUrl()).isEqualTo("uploads/imagenes-ventas/venta-9-cojin-amor.webp");
+    }
+
+    @Test
+    void actualizaArchivoDisenoPdfDeVentaExistente() {
+        Venta venta = new Venta();
+        venta.setId(10L);
+        venta.setCodigoVendido("COJ-PER-001");
+
+        MockMultipartFile file = new MockMultipartFile("file", "cojin-personalizado.pdf", "application/pdf", new byte[] {1, 2, 3});
+
+        when(ventaRepository.findById(10L)).thenReturn(Optional.of(venta));
+        when(ventaImagenStorageService.guardarImagen(10L, file))
+                .thenReturn("uploads/imagenes-ventas/venta-10-cojin-personalizado.pdf");
+        when(ventaRepository.save(any(Venta.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        VentaResponse response = ventaService.actualizarImagenDiseno(10L, file);
+
+        assertThat(venta.getImagenDisenoUrl()).isEqualTo("uploads/imagenes-ventas/venta-10-cojin-personalizado.pdf");
+        assertThat(response.imagenDisenoUrl()).isEqualTo("uploads/imagenes-ventas/venta-10-cojin-personalizado.pdf");
     }
 }

@@ -14,7 +14,7 @@ import org.springframework.web.multipart.MultipartFile;
 @Service
 public class VentaImagenStorageService {
 
-    private static final Set<String> ALLOWED_EXTENSIONS = Set.of("jpg", "jpeg", "png", "webp");
+    private static final Set<String> ALLOWED_EXTENSIONS = Set.of("jpg", "jpeg", "png", "webp", "pdf");
 
     private final Path storageDirectory;
 
@@ -26,20 +26,22 @@ public class VentaImagenStorageService {
 
     public String guardarImagen(Long ventaId, MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw new IllegalArgumentException("Debes seleccionar una imagen valida para el diseño vendido.");
+            throw new IllegalArgumentException("Debes seleccionar un archivo valido para el diseño vendido.");
         }
 
         String originalFilename = file.getOriginalFilename();
-        String safeOriginalName = originalFilename == null ? "imagen-diseno" : Path.of(originalFilename).getFileName().toString();
+        String safeOriginalName =
+                originalFilename == null ? "archivo-diseno" : Path.of(originalFilename).getFileName().toString();
         String extension = obtenerExtension(safeOriginalName);
 
         if (!ALLOWED_EXTENSIONS.contains(extension)) {
-            throw new IllegalArgumentException("La imagen del diseño debe estar en formato PNG, JPG, JPEG o WEBP.");
+            throw new IllegalArgumentException(
+                    "El archivo del diseño debe estar en formato PNG, JPG, JPEG, WEBP o PDF.");
         }
 
         String sanitizedBaseName = sanitizarNombre(removerExtension(safeOriginalName));
         if (sanitizedBaseName.isBlank()) {
-            sanitizedBaseName = "imagen-diseno";
+            sanitizedBaseName = "archivo-diseno";
         }
 
         String fileName =
@@ -56,7 +58,7 @@ public class VentaImagenStorageService {
             Files.createDirectories(storageDirectory);
             Path targetFile = storageDirectory.resolve(fileName).normalize();
             if (!targetFile.startsWith(storageDirectory)) {
-                throw new IllegalArgumentException("No fue posible guardar la imagen del diseño vendido.");
+                throw new IllegalArgumentException("No fue posible guardar el archivo del diseño vendido.");
             }
 
             try (InputStream inputStream = file.getInputStream()) {
@@ -65,7 +67,7 @@ public class VentaImagenStorageService {
 
             return targetFile.toString().replace('\\', '/');
         } catch (IOException exception) {
-            throw new IllegalStateException("No fue posible guardar la imagen del diseño vendido.", exception);
+            throw new IllegalStateException("No fue posible guardar el archivo del diseño vendido.", exception);
         }
     }
 
