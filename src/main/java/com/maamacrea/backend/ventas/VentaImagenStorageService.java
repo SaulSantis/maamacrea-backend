@@ -3,6 +3,7 @@ package com.maamacrea.backend.ventas;
 import com.maamacrea.backend.ResourceNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
@@ -10,6 +11,7 @@ import java.nio.file.StandardCopyOption;
 import java.text.Normalizer;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import org.slf4j.Logger;
@@ -30,16 +32,16 @@ public class VentaImagenStorageService {
 
     private final Path storageDirectory;
     private final Path uploadsRoot;
-    private final Path workingDirectory;
+    private final Path applicationRoot;
 
     public VentaImagenStorageService(
             @Value("${app.ventas.imagenes.upload-dir:uploads/ventas/disenos}")
                     String uploadDir) {
-        this.workingDirectory = Path.of("").toAbsolutePath().normalize();
+        this.applicationRoot = resolverRaizAplicacion();
         Path configuredDirectory = Path.of(uploadDir).normalize();
         this.storageDirectory = configuredDirectory.isAbsolute()
                 ? configuredDirectory
-                : workingDirectory.resolve(configuredDirectory).normalize();
+                : applicationRoot.resolve(configuredDirectory).normalize();
         this.uploadsRoot = resolverUploadsRoot(configuredDirectory);
     }
 
@@ -133,7 +135,7 @@ public class VentaImagenStorageService {
 
     private Path resolverUploadsRoot(Path configuredDirectory) {
         if (!configuredDirectory.isAbsolute()) {
-            return workingDirectory.resolve("uploads").normalize();
+            return applicationRoot.resolve("uploads").normalize();
         }
 
         for (int index = 0; index < storageDirectory.getNameCount(); index++) {
@@ -170,6 +172,52 @@ public class VentaImagenStorageService {
         }
 
         return storageDirectory.resolve(storedPath).normalize();
+    }
+
+    private Path resolverRaizAplicacion() {
+        List<Path> candidateRoots = List.of(
+                Path.of("").toAbsolutePath().normalize(),
+                obtenerRaizDesdeCodeSource());
+
+        for (Path candidateRoot : candidateRoots) {
+            Path projectRoot = buscarRaizDeProyecto(candidateRoot);
+            if (projectRoot != null) {
+                return projectRoot;
+            }
+        }
+
+        return Path.of("").toAbsolutePath().normalize();
+    }
+
+    private Path obtenerRaizDesdeCodeSource() {
+        try {
+            Path codeSourcePath = Path.of(
+                            VentaImagenStorageService.class
+                                    .getProtectionDomain()
+                                    .getCodeSource()
+                                    .getLocation()
+                                    .toURI())
+                    .normalize();
+            return Files.isRegularFile(codeSourcePath)
+                    ? codeSourcePath.getParent()
+                    : codeSourcePath;
+        } catch (URISyntaxException | IllegalStateException exception) {
+            return Path.of("").toAbsolutePath().normalize();
+        }
+    }
+
+    private Path buscarRaizDeProyecto(Path candidateRoot) {
+        Path currentPath = candidateRoot;
+
+        while (currentPath != null) {
+            if (Files.exists(currentPath.resolve("pom.xml"))) {
+                return currentPath.normalize();
+            }
+
+            currentPath = currentPath.getParent();
+        }
+
+        return null;
     }
 
     private String obtenerExtension(String fileName) {

@@ -45,8 +45,8 @@ public class VentaController {
         return ventaService.buscarPorId(id);
     }
 
-    @GetMapping("/{id}/imagen-diseno")
-    public ResponseEntity<Resource> descargarImagenDiseno(
+    @GetMapping({"/{id}/archivo-diseno", "/{id}/imagen-diseno"})
+    public ResponseEntity<Resource> descargarArchivoDiseno(
             @PathVariable Long id,
             @RequestParam(defaultValue = "false") boolean download) {
         VentaImagenStorageService.StoredVentaDesignFile storedFile = ventaService.obtenerImagenDiseno(id);
@@ -67,9 +67,13 @@ public class VentaController {
         return ventaService.actualizar(id, request);
     }
 
-    @PostMapping(path = "/{id}/imagen-diseno", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public VentaResponse subirImagenDiseno(@PathVariable Long id, @RequestParam("file") MultipartFile file) {
-        return ventaService.actualizarImagenDiseno(id, file);
+    @PostMapping(path = {"/{id}/archivo-diseno", "/{id}/imagen-diseno"}, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public VentaResponse subirArchivoDiseno(
+            @PathVariable Long id,
+            @RequestParam(value = "archivo", required = false) MultipartFile archivo,
+            @RequestParam(value = "file", required = false) MultipartFile legacyFile) {
+        MultipartFile uploadedFile = archivo != null && !archivo.isEmpty() ? archivo : legacyFile;
+        return ventaService.actualizarImagenDiseno(id, uploadedFile);
     }
 
     @PatchMapping("/{id}/estado")
