@@ -25,6 +25,22 @@ public record ProductoCreateRequest(
         @DecimalMin(value = "0.00", inclusive = true, message = "El valor de venta final del producto no puede ser negativo.")
         BigDecimal precioVenta,
 
+        @DecimalMin(value = "0.00", inclusive = true, message = "El costo de electricidad no puede ser negativo.")
+        BigDecimal costoElectricidad,
+
+        @DecimalMin(value = "0.00", inclusive = true, message = "El costo de desgaste de equipo no puede ser negativo.")
+        BigDecimal costoDesgasteEquipo,
+
         @NotEmpty(message = "Debes asociar al menos un insumo al producto.")
         @Size(max = 100, message = "El producto no puede tener mas de 100 insumos asociados en una sola solicitud.")
-        List<@Valid ProductoInsumoCreateRequest> insumos) {}
+        List<@Valid ProductoInsumoCreateRequest> insumos) {
+
+    public ProductoCreateRequest(
+            String codigo,
+            String nombre,
+            ProductoTipo tipoProducto,
+            BigDecimal precioVenta,
+            List<@Valid ProductoInsumoCreateRequest> insumos) {
+        this(codigo, nombre, tipoProducto, precioVenta, null, null, insumos);
+    }
+}

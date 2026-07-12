@@ -78,6 +78,8 @@ public class ProductoService {
         producto.setNombre(request.nombre().trim());
         producto.setTipoProducto(request.tipoProducto());
         producto.setPrecioVenta(request.precioVenta().setScale(2, RoundingMode.HALF_UP));
+        producto.setCostoElectricidad(scaleMoneyOrZero(request.costoElectricidad()));
+        producto.setCostoDesgasteEquipo(scaleMoneyOrZero(request.costoDesgasteEquipo()));
 
         Producto guardado = productoRepository.save(producto);
         guardarRelaciones(guardado, request.insumos());
@@ -99,6 +101,8 @@ public class ProductoService {
         producto.setNombre(request.nombre().trim());
         producto.setTipoProducto(request.tipoProducto());
         producto.setPrecioVenta(request.precioVenta().setScale(2, RoundingMode.HALF_UP));
+        producto.setCostoElectricidad(scaleMoneyOrZero(request.costoElectricidad()));
+        producto.setCostoDesgasteEquipo(scaleMoneyOrZero(request.costoDesgasteEquipo()));
 
         Producto guardado = productoRepository.save(producto);
         productoInsumoRepository.deleteByProductoId(productoId);
@@ -162,23 +166,25 @@ public class ProductoService {
     }
 
     private Producto recalcularYGuardar(Producto producto) {
-        List<ProductoInsumo> relaciones = productoInsumoRepository.findByProductoIdOrderByIdAsc(producto.getId());
-        CosteoProductoResultado costeo = calcularCosteoProducto(relaciones);
-
-        producto.setCostoMateriales(costeo.costoMateriales());
-        producto.setPrecioSugerido(costeo.precioSugerido());
-        producto.setGanancia(costeo.gananciaDirecta());
-
         if (producto.getPrecioVenta() == null) {
             producto.setPrecioVenta(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
         } else {
             producto.setPrecioVenta(producto.getPrecioVenta().setScale(2, RoundingMode.HALF_UP));
         }
+        producto.setCostoElectricidad(scaleMoneyOrZero(producto.getCostoElectricidad()));
+        producto.setCostoDesgasteEquipo(scaleMoneyOrZero(producto.getCostoDesgasteEquipo()));
+
+        List<ProductoInsumo> relaciones = productoInsumoRepository.findByProductoIdOrderByIdAsc(producto.getId());
+        CosteoProductoResultado costeo = calcularCosteoProducto(producto, relaciones);
+
+        producto.setCostoMateriales(costeo.costoMateriales());
+        producto.setPrecioSugerido(costeo.precioSugerido());
+        producto.setGanancia(costeo.gananciaDirecta());
 
         return productoRepository.save(producto);
     }
 
-    private CosteoProductoResultado calcularCosteoProducto(List<ProductoInsumo> relaciones) {
+    private CosteoProductoResultado calcularCosteoProducto(Producto producto, List<ProductoInsumo> relaciones) {
         Map<Long, CosteoDetalleResultado> resultadosPorRelacion = new LinkedHashMap<>();
         List<String> advertencias = new ArrayList<>();
         BigDecimal costoMateriales = BigDecimal.ZERO;
@@ -197,12 +203,21 @@ public class ProductoService {
         }
 
         BigDecimal costoMaterialesEscalado = costoMateriales.setScale(4, RoundingMode.HALF_UP);
-        BigDecimal costoTotal = costoMaterialesEscalado;
+        BigDecimal costoElectricidad = scaleMoneyOrZero(producto.getCostoElectricidad());
+        BigDecimal costoDesgasteEquipo = scaleMoneyOrZero(producto.getCostoDesgasteEquipo());
+        BigDecimal totalCostosAdicionales = costoElectricidad.add(costoDesgasteEquipo).setScale(4, RoundingMode.HALF_UP);
+        BigDecimal costoTotal = costoMaterialesEscalado.add(totalCostosAdicionales).setScale(4, RoundingMode.HALF_UP);
         BigDecimal precioSugerido = calcularPrecioSugerido(costoTotal);
-        BigDecimal gananciaDirecta = precioSugerido.subtract(costoTotal).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal referenciaVenta = scaleMoneyOrZero(producto.getPrecioVenta());
+        BigDecimal gananciaDirecta = (referenciaVenta.compareTo(BigDecimal.ZERO) > 0 ? referenciaVenta : precioSugerido)
+                .subtract(costoTotal)
+                .setScale(2, RoundingMode.HALF_UP);
 
         return new CosteoProductoResultado(
                 costoMaterialesEscalado,
+                costoElectricidad,
+                costoDesgasteEquipo,
+                totalCostosAdicionales,
                 costoTotal,
                 precioSugerido,
                 gananciaDirecta,
@@ -643,7 +658,7 @@ public class ProductoService {
 
     private ProductoResponse toProductoResponse(Producto producto) {
         List<ProductoInsumo> relaciones = productoInsumoRepository.findByProductoIdOrderByIdAsc(producto.getId());
-        CosteoProductoResultado costeo = calcularCosteoProducto(relaciones);
+        CosteoProductoResultado costeo = calcularCosteoProducto(producto, relaciones);
         List<ProductoInsumoResponse> insumos = relaciones.stream()
                 .map(relacion -> toProductoInsumoResponse(relacion, costeo.detallesPorRelacion().get(relacion.getId())))
                 .toList();
@@ -662,6 +677,10 @@ public class ProductoService {
                 producto.getCreatedAt(),
                 producto.getPrecioVenta(),
                 costeo.costoMateriales(),
+                costeo.costoElectricidad(),
+                costeo.costoDesgasteEquipo(),
+                costeo.totalCostosAdicionales(),
+                costeo.costoTotal(),
                 costeo.precioSugerido(),
                 costeo.gananciaDirecta(),
                 ultimoCambioPrecio,
@@ -782,6 +801,12 @@ public class ProductoService {
         if (request.precioVenta().compareTo(BigDecimal.ZERO) < 0) {
             throw new IllegalArgumentException("El valor de venta final del producto no puede ser negativo.");
         }
+        if (request.costoElectricidad() != null && request.costoElectricidad().compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("El costo de electricidad no puede ser negativo.");
+        }
+        if (request.costoDesgasteEquipo() != null && request.costoDesgasteEquipo().compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("El costo de desgaste de equipo no puede ser negativo.");
+        }
         if (request.insumos() == null || request.insumos().isEmpty()) {
             throw new IllegalArgumentException("Debes asociar al menos un insumo al producto.");
         }
@@ -840,6 +865,10 @@ public class ProductoService {
 
     private BigDecimal scaleOptional(BigDecimal value, int scale) {
         return value == null ? null : value.setScale(scale, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal scaleMoneyOrZero(BigDecimal value) {
+        return valorOZero(value).setScale(2, RoundingMode.HALF_UP);
     }
 
     private String normalizeOptionalText(String value) {
@@ -912,6 +941,9 @@ public class ProductoService {
 
     private record CosteoProductoResultado(
             BigDecimal costoMateriales,
+            BigDecimal costoElectricidad,
+            BigDecimal costoDesgasteEquipo,
+            BigDecimal totalCostosAdicionales,
             BigDecimal costoTotal,
             BigDecimal precioSugerido,
             BigDecimal gananciaDirecta,

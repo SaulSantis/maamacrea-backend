@@ -51,6 +51,12 @@ public class Producto {
     @Column(name = "costo_materiales", nullable = false, precision = 19, scale = 4)
     private BigDecimal costoMateriales = BigDecimal.ZERO;
 
+    @Column(name = "costo_electricidad", nullable = false, precision = 19, scale = 2)
+    private BigDecimal costoElectricidad = BigDecimal.ZERO;
+
+    @Column(name = "costo_desgaste_equipo", nullable = false, precision = 19, scale = 2)
+    private BigDecimal costoDesgasteEquipo = BigDecimal.ZERO;
+
     @Column(name = "precio_sugerido", nullable = false, precision = 19, scale = 2)
     private BigDecimal precioSugerido = BigDecimal.ZERO;
 
@@ -79,6 +85,12 @@ public class Producto {
         }
         if (costoMateriales == null) {
             costoMateriales = BigDecimal.ZERO;
+        }
+        if (costoElectricidad == null) {
+            costoElectricidad = BigDecimal.ZERO;
+        }
+        if (costoDesgasteEquipo == null) {
+            costoDesgasteEquipo = BigDecimal.ZERO;
         }
         if (precioSugerido == null) {
             precioSugerido = BigDecimal.ZERO;

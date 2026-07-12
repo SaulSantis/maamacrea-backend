@@ -266,8 +266,12 @@ class ProductoServiceTest {
                         null))));
 
         assertThat(response.costoMateriales()).isEqualByComparingTo("99.7474");
+        assertThat(response.costoElectricidad()).isEqualByComparingTo("0.00");
+        assertThat(response.costoDesgasteEquipo()).isEqualByComparingTo("0.00");
+        assertThat(response.totalCostosAdicionales()).isEqualByComparingTo("0.0000");
+        assertThat(response.costoTotalProduccion()).isEqualByComparingTo("99.7474");
         assertThat(response.precioSugerido()).isEqualByComparingTo("199.49");
-        assertThat(response.ganancia()).isEqualByComparingTo("99.74");
+        assertThat(response.ganancia()).isEqualByComparingTo("9890.25");
         assertThat(response.costeoCompleto()).isTrue();
         assertThat(response.advertenciasCosteo()).isEmpty();
         assertThat(response.insumos().get(0).costoEstimado()).isEqualByComparingTo("99.7474");

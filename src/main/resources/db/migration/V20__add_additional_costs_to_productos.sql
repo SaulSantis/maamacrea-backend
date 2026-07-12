@@ -1,0 +1,3 @@
+ALTER TABLE productos
+ADD COLUMN costo_electricidad NUMERIC(19, 2) NOT NULL DEFAULT 0,
+ADD COLUMN costo_desgaste_equipo NUMERIC(19, 2) NOT NULL DEFAULT 0;
