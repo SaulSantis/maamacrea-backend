@@ -21,7 +21,8 @@ public class VentaService {
             VentaEstadoPedido.PAGO_CONFIRMADO,
             VentaEstadoPedido.DISENO_Y_CONFECCION,
             VentaEstadoPedido.ENTREGADO_A_CORREOS,
-            VentaEstadoPedido.RECIBIDO_POR_CLIENTE);
+            VentaEstadoPedido.RECIBIDO_POR_CLIENTE,
+            VentaEstadoPedido.VENTA_FINALIZADA);
 
     private final VentaRepository ventaRepository;
     private final ProductoService productoService;
@@ -115,6 +116,13 @@ public class VentaService {
     public VentaImagenStorageService.StoredVentaDesignFile obtenerImagenDiseno(Long id) {
         Venta venta = obtenerEntidad(id);
         return ventaImagenStorageService.cargarImagen(venta.getImagenDisenoUrl());
+    }
+
+    @Transactional
+    public void eliminar(Long id) {
+        Venta venta = obtenerEntidad(id);
+        ventaRepository.delete(venta);
+        ventaImagenStorageService.eliminarImagen(venta.getImagenDisenoUrl());
     }
 
     @Transactional

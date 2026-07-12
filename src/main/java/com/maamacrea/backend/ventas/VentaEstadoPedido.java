@@ -5,5 +5,6 @@ public enum VentaEstadoPedido {
     DISENO_Y_CONFECCION,
     ENTREGADO_A_CORREOS,
     RECIBIDO_POR_CLIENTE,
+    VENTA_FINALIZADA,
     CANCELADO
 }

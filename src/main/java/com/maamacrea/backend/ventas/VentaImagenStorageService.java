@@ -124,6 +124,29 @@ public class VentaImagenStorageService {
         }
     }
 
+    public void eliminarImagen(String storedPath) {
+        if (storedPath == null || storedPath.isBlank()) {
+            return;
+        }
+
+        try {
+            Path normalizedStoredPath = Path.of(storedPath.replace('\\', '/')).normalize();
+            Path absoluteFilePath = normalizedStoredPath.isAbsolute()
+                    ? normalizedStoredPath
+                    : resolverRutaAbsoluta(normalizedStoredPath);
+
+            if (!absoluteFilePath.startsWith(uploadsRoot)) {
+                throw new IllegalArgumentException("No fue posible eliminar el archivo del diseno vendido.");
+            }
+
+            if (Files.deleteIfExists(absoluteFilePath)) {
+                LOGGER.info("Archivo de diseno eliminado: {}", absoluteFilePath);
+            }
+        } catch (InvalidPathException | IOException exception) {
+            throw new IllegalStateException("No fue posible eliminar el archivo del diseno vendido.", exception);
+        }
+    }
+
     private String construirRutaRelativa(Path targetFile) {
         if (targetFile.startsWith(uploadsRoot)) {
             Path relativePath = uploadsRoot.relativize(targetFile);

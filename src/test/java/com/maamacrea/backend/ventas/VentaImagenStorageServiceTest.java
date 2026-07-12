@@ -42,4 +42,20 @@ class VentaImagenStorageServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("El archivo del diseno debe ser PNG, JPG, JPEG, WEBP o PDF.");
     }
+
+    @Test
+    void eliminaArchivoGuardadoCuandoLaVentaSeBorra() throws Exception {
+        VentaImagenStorageService storageService =
+                new VentaImagenStorageService(tempDir.resolve("uploads/ventas/disenos").toString());
+
+        MockMultipartFile file =
+                new MockMultipartFile("file", "COJ-PER-001.pdf", "application/pdf", new byte[] {1, 2, 3});
+
+        String storedPath = storageService.guardarImagen(17L, "COJ-PER-001", file);
+        Path storedFile = tempDir.resolve(storedPath).normalize();
+
+        storageService.eliminarImagen(storedPath);
+
+        assertThat(Files.exists(storedFile)).isFalse();
+    }
 }

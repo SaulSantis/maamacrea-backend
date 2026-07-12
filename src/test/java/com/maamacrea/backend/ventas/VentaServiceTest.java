@@ -183,6 +183,23 @@ class VentaServiceTest {
     }
 
     @Test
+    void permiteMarcarVentaComoFinalizada() {
+        Venta venta = new Venta();
+        venta.setId(9L);
+        venta.setProductoId(1L);
+        venta.setEstadoPedido(VentaEstadoPedido.RECIBIDO_POR_CLIENTE);
+
+        when(ventaRepository.findById(9L)).thenReturn(Optional.of(venta));
+        when(ventaRepository.save(any(Venta.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        VentaResponse response = ventaService.actualizarEstado(
+                9L, new VentaEstadoUpdateRequest(VentaEstadoPedido.VENTA_FINALIZADA));
+
+        assertThat(response.estadoPedido()).isEqualTo(VentaEstadoPedido.VENTA_FINALIZADA);
+        assertThat(venta.getEstadoPedido()).isEqualTo(VentaEstadoPedido.VENTA_FINALIZADA);
+    }
+
+    @Test
     void actualizaVentaExistenteSinCambiarSnapshots() {
         Venta venta = new Venta();
         venta.setId(9L);
@@ -234,6 +251,20 @@ class VentaServiceTest {
                         9L, new VentaEstadoUpdateRequest(VentaEstadoPedido.CANCELADO)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("El estado del pedido no es valido para esta etapa.");
+    }
+
+    @Test
+    void eliminaVentaYArchivoDisenoAsociado() {
+        Venta venta = new Venta();
+        venta.setId(9L);
+        venta.setImagenDisenoUrl("uploads/ventas/disenos/COJ-AMO-001-20260711-010000.webp");
+
+        when(ventaRepository.findById(9L)).thenReturn(Optional.of(venta));
+
+        ventaService.eliminar(9L);
+
+        verify(ventaRepository).delete(venta);
+        verify(ventaImagenStorageService).eliminarImagen("uploads/ventas/disenos/COJ-AMO-001-20260711-010000.webp");
     }
 
     @Test
