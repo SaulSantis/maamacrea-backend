@@ -15,43 +15,57 @@ class VentaImagenStorageServiceTest {
     Path tempDir;
 
     @Test
-    void guardaArchivoPdfYDevuelveRutaRelativaDentroDeUploads() throws Exception {
+    void guardaArchivoPngDentroDeLaCarpetaDeLaVentaYDevuelveRutaRelativa() throws Exception {
         VentaImagenStorageService storageService =
-                new VentaImagenStorageService(tempDir.resolve("uploads/ventas/disenos").toString());
+                new VentaImagenStorageService(tempDir.resolve("uploads/ventas").toString(), 10);
 
         MockMultipartFile file =
-                new MockMultipartFile("file", "COJ-PER-001.pdf", "application/pdf", new byte[] {1, 2, 3});
+                new MockMultipartFile("file", "COJ-PER-001.png", "image/png", new byte[] {1, 2, 3});
 
-        String storedPath = storageService.guardarImagen(15L, "COJ-PER-001", file);
-        Path storedFile = tempDir.resolve(storedPath).normalize();
+        VentaImagenStorageService.StoredVentaUpload storedUpload = storageService.guardarArchivo(15L, file);
+        Path storedFile = tempDir.resolve(storedUpload.storedPath()).normalize();
 
-        assertThat(storedPath).startsWith("uploads/ventas/disenos/").endsWith(".pdf");
+        assertThat(storedUpload.storedPath()).startsWith("uploads/ventas/15/").endsWith(".png");
         assertThat(Files.exists(storedFile)).isTrue();
-        assertThat(storageService.cargarImagen(storedPath).fileName()).isEqualTo(storedFile.getFileName().toString());
+        assertThat(storageService.cargarImagen(storedUpload.storedPath()).fileName())
+                .isEqualTo(storedFile.getFileName().toString());
     }
 
     @Test
     void rechazaExtensionNoPermitida() {
         VentaImagenStorageService storageService =
-                new VentaImagenStorageService(tempDir.resolve("uploads/ventas/disenos").toString());
+                new VentaImagenStorageService(tempDir.resolve("uploads/ventas").toString(), 10);
 
         MockMultipartFile file =
                 new MockMultipartFile("file", "COJ-PER-001.txt", "text/plain", new byte[] {1, 2, 3});
 
-        assertThatThrownBy(() -> storageService.guardarImagen(16L, "COJ-PER-001", file))
+        assertThatThrownBy(() -> storageService.guardarArchivo(16L, file))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("El archivo del diseno debe ser PNG, JPG, JPEG, WEBP o PDF.");
+                .hasMessage("El formato del archivo no es compatible.");
+    }
+
+    @Test
+    void rechazaArchivoConMimeInvalidoAunqueTengaExtensionPermitida() {
+        VentaImagenStorageService storageService =
+                new VentaImagenStorageService(tempDir.resolve("uploads/ventas").toString(), 10);
+
+        MockMultipartFile file =
+                new MockMultipartFile("file", "COJ-PER-001.png", "text/plain", new byte[] {1, 2, 3});
+
+        assertThatThrownBy(() -> storageService.guardarArchivo(17L, file))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("El formato del archivo no es compatible.");
     }
 
     @Test
     void eliminaArchivoGuardadoCuandoLaVentaSeBorra() throws Exception {
         VentaImagenStorageService storageService =
-                new VentaImagenStorageService(tempDir.resolve("uploads/ventas/disenos").toString());
+                new VentaImagenStorageService(tempDir.resolve("uploads/ventas").toString(), 10);
 
         MockMultipartFile file =
                 new MockMultipartFile("file", "COJ-PER-001.pdf", "application/pdf", new byte[] {1, 2, 3});
 
-        String storedPath = storageService.guardarImagen(17L, "COJ-PER-001", file);
+        String storedPath = storageService.guardarArchivo(18L, file).storedPath();
         Path storedFile = tempDir.resolve(storedPath).normalize();
 
         storageService.eliminarImagen(storedPath);

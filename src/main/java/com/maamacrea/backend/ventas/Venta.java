@@ -1,6 +1,7 @@
 package com.maamacrea.backend.ventas;
 
 import com.maamacrea.backend.productos.ProductoTipo;
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -8,12 +9,16 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -55,6 +60,10 @@ public class Venta {
 
     @Column(name = "imagen_diseno_url", length = 500)
     private String imagenDisenoUrl;
+
+    @OneToMany(mappedBy = "venta", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("ordenVisual ASC, id ASC")
+    private List<VentaArchivoDiseno> archivosDiseno = new ArrayList<>();
 
     @Column(nullable = false, precision = 12, scale = 3)
     private BigDecimal cantidad;
@@ -145,5 +154,15 @@ public class Venta {
     @PreUpdate
     void preUpdate() {
         updatedAt = LocalDateTime.now();
+    }
+
+    public void addArchivoDiseno(VentaArchivoDiseno archivoDiseno) {
+        archivosDiseno.add(archivoDiseno);
+        archivoDiseno.setVenta(this);
+    }
+
+    public void removeArchivoDiseno(VentaArchivoDiseno archivoDiseno) {
+        archivosDiseno.remove(archivoDiseno);
+        archivoDiseno.setVenta(null);
     }
 }

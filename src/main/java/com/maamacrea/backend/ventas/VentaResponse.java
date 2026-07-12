@@ -4,6 +4,7 @@ import com.maamacrea.backend.productos.ProductoTipo;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 public record VentaResponse(
         Long id,
@@ -15,6 +16,7 @@ public record VentaResponse(
         String coleccionDiseno,
         String referenciaDiseno,
         String imagenDisenoUrl,
+        List<VentaArchivoDisenoResponse> archivos,
         BigDecimal cantidad,
         BigDecimal precioUnitario,
         BigDecimal totalVenta,

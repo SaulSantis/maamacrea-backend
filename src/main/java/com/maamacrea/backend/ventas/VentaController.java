@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -50,22 +51,47 @@ public class VentaController {
     public ResponseEntity<Resource> descargarArchivoDiseno(
             @PathVariable Long id,
             @RequestParam(defaultValue = "false") boolean download) {
-        VentaImagenStorageService.StoredVentaDesignFile storedFile = ventaService.obtenerImagenDiseno(id);
-        String dispositionType = download ? "attachment" : "inline";
-        return ResponseEntity.ok()
-                .contentType(storedFile.mediaType())
-                .header(HttpHeaders.CONTENT_DISPOSITION, dispositionType + "; filename=\"" + storedFile.fileName() + "\"")
-                .body(storedFile.resource());
+        return buildFileResponse(ventaService.obtenerImagenDiseno(id), download);
     }
 
-    @PostMapping
+    @GetMapping("/{ventaId}/archivos/{archivoId}")
+    public ResponseEntity<Resource> descargarArchivoVenta(
+            @PathVariable Long ventaId,
+            @PathVariable Long archivoId,
+            @RequestParam(defaultValue = "false") boolean download) {
+        return buildFileResponse(ventaService.obtenerArchivoDiseno(ventaId, archivoId), download);
+    }
+
+    @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<VentaResponse> crear(@Valid @RequestBody VentaRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ventaService.crear(request));
     }
 
-    @PutMapping("/{id}")
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<VentaResponse> crearConArchivos(
+            @Valid @RequestPart("datos") VentaMultipartRequest request,
+            @RequestPart(value = "archivos", required = false) List<MultipartFile> archivos) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(ventaService.crear(request, archivos));
+    }
+
+    @PutMapping(path = "/{id}", consumes = MediaType.APPLICATION_JSON_VALUE)
     public VentaResponse actualizar(@PathVariable Long id, @Valid @RequestBody VentaRequest request) {
         return ventaService.actualizar(id, request);
+    }
+
+    @PutMapping(path = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public VentaResponse actualizarConArchivos(
+            @PathVariable Long id,
+            @Valid @RequestPart("datos") VentaMultipartRequest request,
+            @RequestPart(value = "archivos", required = false) List<MultipartFile> archivos) {
+        return ventaService.actualizar(id, request, archivos);
+    }
+
+    @PostMapping(path = "/{id}/archivos", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public VentaResponse agregarArchivos(
+            @PathVariable Long id,
+            @RequestPart(value = "archivos", required = false) List<MultipartFile> archivos) {
+        return ventaService.agregarArchivos(id, archivos);
     }
 
     @PostMapping(path = {"/{id}/archivo-diseno", "/{id}/imagen-diseno"}, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -82,9 +108,25 @@ public class VentaController {
         return ventaService.actualizarEstado(id, request);
     }
 
+    @DeleteMapping("/{ventaId}/archivos/{archivoId}")
+    public VentaResponse eliminarArchivo(@PathVariable Long ventaId, @PathVariable Long archivoId) {
+        return ventaService.eliminarArchivo(ventaId, archivoId);
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> eliminar(@PathVariable Long id) {
         ventaService.eliminar(id);
         return ResponseEntity.noContent().build();
+    }
+
+    private ResponseEntity<Resource> buildFileResponse(
+            VentaImagenStorageService.StoredVentaDesignFile storedFile,
+            boolean download) {
+        String dispositionType = download ? "attachment" : "inline";
+        return ResponseEntity.ok()
+                .contentType(storedFile.mediaType())
+                .header(HttpHeaders.CONTENT_DISPOSITION, dispositionType + "; filename=\"" + storedFile.fileName() + "\"")
+                .header("X-Content-Type-Options", "nosniff")
+                .body(storedFile.resource());
     }
 }
