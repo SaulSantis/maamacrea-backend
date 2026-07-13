@@ -62,6 +62,13 @@ public class VentaController {
         return buildFileResponse(ventaService.obtenerArchivoDiseno(ventaId, archivoId), download);
     }
 
+    @GetMapping("/{ventaId}/archivos/{archivoId}/miniatura")
+    public ResponseEntity<Resource> descargarMiniaturaVenta(
+            @PathVariable Long ventaId,
+            @PathVariable Long archivoId) {
+        return buildFileResponse(ventaService.obtenerMiniaturaDiseno(ventaId, archivoId), false);
+    }
+
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<VentaResponse> crear(@Valid @RequestBody VentaRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ventaService.crear(request));
@@ -69,9 +76,9 @@ public class VentaController {
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<VentaResponse> crearConArchivos(
-            @Valid @RequestPart("datos") VentaMultipartRequest request,
-            @RequestPart(value = "archivos", required = false) List<MultipartFile> archivos) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(ventaService.crear(request, archivos));
+            @Valid @RequestPart("datos") VentaRequest request,
+            @RequestPart(value = "archivosNuevos", required = false) List<MultipartFile> archivosNuevos) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(ventaService.crear(request, archivosNuevos));
     }
 
     @PutMapping(path = "/{id}", consumes = MediaType.APPLICATION_JSON_VALUE)
@@ -82,15 +89,16 @@ public class VentaController {
     @PutMapping(path = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public VentaResponse actualizarConArchivos(
             @PathVariable Long id,
-            @Valid @RequestPart("datos") VentaMultipartRequest request,
-            @RequestPart(value = "archivos", required = false) List<MultipartFile> archivos) {
-        return ventaService.actualizar(id, request, archivos);
+            @Valid @RequestPart("datos") VentaRequest request,
+            @RequestPart(value = "archivosNuevos", required = false) List<MultipartFile> archivosNuevos,
+            @RequestPart(value = "archivosEliminar", required = false) List<Long> archivosEliminar) {
+        return ventaService.actualizar(id, request, archivosEliminar, archivosNuevos);
     }
 
     @PostMapping(path = "/{id}/archivos", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public VentaResponse agregarArchivos(
             @PathVariable Long id,
-            @RequestPart(value = "archivos", required = false) List<MultipartFile> archivos) {
+            @RequestPart(value = "archivosNuevos", required = false) List<MultipartFile> archivos) {
         return ventaService.agregarArchivos(id, archivos);
     }
 

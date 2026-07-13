@@ -41,11 +41,41 @@ public class VentaArchivoDiseno {
     @Column(name = "ruta_almacenamiento", nullable = false, length = 1000)
     private String rutaAlmacenamiento;
 
+    @Column(name = "nombre_miniatura", length = 255)
+    private String nombreMiniatura;
+
+    @Column(name = "ruta_miniatura", length = 1000)
+    private String rutaMiniatura;
+
     @Column(name = "tipo_mime", nullable = false, length = 150)
     private String tipoMime;
 
     @Column(name = "tamano_bytes", nullable = false)
     private Long tamanoBytes = 0L;
+
+    @Column(name = "formato_final", length = 40)
+    private String formatoFinal;
+
+    @Column(name = "tamano_original_bytes", nullable = false)
+    private Long tamanoOriginalBytes = 0L;
+
+    @Column(name = "tamano_optimizado_bytes", nullable = false)
+    private Long tamanoOptimizadoBytes = 0L;
+
+    @Column(name = "ancho_original")
+    private Integer anchoOriginal;
+
+    @Column(name = "alto_original")
+    private Integer altoOriginal;
+
+    @Column(name = "ancho_optimizado")
+    private Integer anchoOptimizado;
+
+    @Column(name = "alto_optimizado")
+    private Integer altoOptimizado;
+
+    @Column(name = "hash_sha256", length = 64)
+    private String hashSha256;
 
     @Column(name = "orden_visual", nullable = false)
     private Integer ordenVisual = 0;

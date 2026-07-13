@@ -1,5 +1,6 @@
 package com.maamacrea.backend.ventas;
 
+import com.maamacrea.backend.ApiRequestException;
 import com.maamacrea.backend.ResourceNotFoundException;
 import com.maamacrea.backend.productos.ProductoResponse;
 import com.maamacrea.backend.productos.ProductoService;
@@ -13,6 +14,7 @@ import java.util.List;
 import java.util.Set;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -41,7 +43,7 @@ public class VentaService {
             VentaArchivoDisenoRepository ventaArchivoDisenoRepository,
             ProductoService productoService,
             VentaImagenStorageService ventaImagenStorageService,
-            @Value("${app.ventas.archivos.max-por-venta:10}")
+            @Value("${app.ventas.images.max-count:${app.ventas.archivos.max-por-venta:10}}")
                     int maxArchivosPorVenta) {
         this.ventaRepository = ventaRepository;
         this.ventaArchivoDisenoRepository = ventaArchivoDisenoRepository;
@@ -74,10 +76,9 @@ public class VentaService {
     }
 
     @Transactional
-    public VentaResponse crear(VentaMultipartRequest request, List<MultipartFile> archivos) {
-        VentaRequest ventaRequest = requireVentaRequest(request);
-        Venta venta = ventaRepository.save(buildVentaNueva(ventaRequest));
-        return persistFileChanges(venta, List.of(), archivos);
+    public VentaResponse crear(VentaRequest request, List<MultipartFile> archivosNuevos) {
+        Venta venta = ventaRepository.save(buildVentaNueva(request));
+        return persistFileChanges(venta, List.of(), archivosNuevos);
     }
 
     @Transactional
@@ -87,9 +88,9 @@ public class VentaService {
     }
 
     @Transactional
-    public VentaResponse actualizar(Long id, VentaMultipartRequest request, List<MultipartFile> archivos) {
-        Venta venta = applyVentaUpdate(id, requireVentaRequest(request));
-        return persistFileChanges(venta, request.normalizedDeletedFileIds(), archivos);
+    public VentaResponse actualizar(Long id, VentaRequest request, List<Long> archivosEliminar, List<MultipartFile> archivosNuevos) {
+        Venta venta = applyVentaUpdate(id, request);
+        return persistFileChanges(venta, archivosEliminar, archivosNuevos);
     }
 
     @Transactional
@@ -130,9 +131,13 @@ public class VentaService {
     }
 
     public VentaImagenStorageService.StoredVentaDesignFile obtenerArchivoDiseno(Long ventaId, Long archivoId) {
-        VentaArchivoDiseno archivo = ventaArchivoDisenoRepository.findByIdAndVentaId(archivoId, ventaId)
-                .orElseThrow(() -> new ResourceNotFoundException("Archivo de venta no encontrado: " + archivoId));
+        VentaArchivoDiseno archivo = obtenerArchivoEntidad(ventaId, archivoId);
         return ventaImagenStorageService.cargarImagen(archivo.getRutaAlmacenamiento());
+    }
+
+    public VentaImagenStorageService.StoredVentaDesignFile obtenerMiniaturaDiseno(Long ventaId, Long archivoId) {
+        VentaArchivoDiseno archivo = obtenerArchivoEntidad(ventaId, archivoId);
+        return ventaImagenStorageService.cargarMiniatura(archivo.getRutaMiniatura(), archivo.getRutaAlmacenamiento());
     }
 
     @Transactional
@@ -145,24 +150,20 @@ public class VentaService {
     public void eliminar(Long id) {
         Venta venta = obtenerEntidad(id);
         LinkedHashSet<String> storedPaths = new LinkedHashSet<>();
-        venta.getArchivosDiseno().stream()
-                .map(VentaArchivoDiseno::getRutaAlmacenamiento)
-                .filter(this::hasText)
-                .forEach(storedPaths::add);
+        venta.getArchivosDiseno().forEach(archivo -> {
+            if (hasText(archivo.getRutaAlmacenamiento())) {
+                storedPaths.add(archivo.getRutaAlmacenamiento());
+            }
+            if (hasText(archivo.getRutaMiniatura())) {
+                storedPaths.add(archivo.getRutaMiniatura());
+            }
+        });
         if (hasText(venta.getImagenDisenoUrl())) {
             storedPaths.add(venta.getImagenDisenoUrl());
         }
 
         ventaRepository.delete(venta);
         registerFileSynchronization(List.of(), new ArrayList<>(storedPaths));
-    }
-
-    private VentaRequest requireVentaRequest(VentaMultipartRequest request) {
-        if (request == null || request.venta() == null) {
-            throw new IllegalArgumentException("Los datos de la venta son obligatorios.");
-        }
-
-        return request.venta();
     }
 
     private Venta buildVentaNueva(VentaRequest request) {
@@ -246,14 +247,10 @@ public class VentaService {
 
         List<VentaImagenStorageService.StoredVentaUpload> storedUploads =
                 storeNewFiles(venta.getId(), normalizedNewFiles);
-        List<String> newStoredPaths = storedUploads.stream()
-                .map(VentaImagenStorageService.StoredVentaUpload::storedPath)
-                .toList();
-        List<String> storedPathsToDelete = archivosAEliminar.stream()
-                .map(VentaArchivoDiseno::getRutaAlmacenamiento)
-                .filter(this::hasText)
-                .distinct()
-                .toList();
+        validateDuplicateHashes(venta, archivosAEliminar, storedUploads);
+
+        List<String> newStoredPaths = extractStoredPathsFromUploads(storedUploads);
+        List<String> storedPathsToDelete = extractStoredPathsFromEntities(archivosAEliminar);
         boolean fileStateChanged = !archivosAEliminar.isEmpty() || !storedUploads.isEmpty();
 
         try {
@@ -265,9 +262,19 @@ public class VentaService {
                 VentaArchivoDiseno archivo = new VentaArchivoDiseno();
                 archivo.setNombreOriginal(storedUpload.originalFileName());
                 archivo.setNombreAlmacenado(storedUpload.storedFileName());
-                archivo.setRutaAlmacenamiento(storedUpload.storedPath());
+                archivo.setRutaAlmacenamiento(storedUpload.storedImagePath());
+                archivo.setNombreMiniatura(storedUpload.thumbnailFileName());
+                archivo.setRutaMiniatura(storedUpload.storedThumbnailPath());
                 archivo.setTipoMime(storedUpload.mediaType());
-                archivo.setTamanoBytes(storedUpload.sizeBytes());
+                archivo.setTamanoBytes(storedUpload.optimizedSizeBytes());
+                archivo.setFormatoFinal(storedUpload.finalFormat());
+                archivo.setTamanoOriginalBytes(storedUpload.originalSizeBytes());
+                archivo.setTamanoOptimizadoBytes(storedUpload.optimizedSizeBytes());
+                archivo.setAnchoOriginal(storedUpload.originalWidth());
+                archivo.setAltoOriginal(storedUpload.originalHeight());
+                archivo.setAnchoOptimizado(storedUpload.optimizedWidth());
+                archivo.setAltoOptimizado(storedUpload.optimizedHeight());
+                archivo.setHashSha256(storedUpload.sha256Hash());
                 venta.addArchivoDiseno(archivo);
             }
 
@@ -284,8 +291,10 @@ public class VentaService {
 
     private void validateTotalArchivos(int totalArchivosFinal) {
         if (totalArchivosFinal > maxArchivosPorVenta) {
-            throw new IllegalArgumentException(
-                    "Solo puedes guardar hasta " + maxArchivosPorVenta + " archivos por venta.");
+            throw new ApiRequestException(
+                    HttpStatus.BAD_REQUEST,
+                    "DEMASIADAS_IMAGENES",
+                    "Una venta puede contener un maximo de " + maxArchivosPorVenta + " imagenes.");
         }
     }
 
@@ -310,7 +319,10 @@ public class VentaService {
                 .toList();
 
         if (normalizedFiles.stream().anyMatch(MultipartFile::isEmpty)) {
-            throw new IllegalArgumentException("El archivo seleccionado esta vacio.");
+            throw new ApiRequestException(
+                    HttpStatus.BAD_REQUEST,
+                    "ARCHIVO_VACIO",
+                    "El archivo seleccionado esta vacio.");
         }
 
         return normalizedFiles;
@@ -341,11 +353,49 @@ public class VentaService {
             }
             return storedUploads;
         } catch (RuntimeException exception) {
-            cleanupStoredFilesImmediately(storedUploads.stream()
-                    .map(VentaImagenStorageService.StoredVentaUpload::storedPath)
-                    .toList());
+            cleanupStoredFilesImmediately(extractStoredPathsFromUploads(storedUploads));
             throw exception;
         }
+    }
+
+    private void validateDuplicateHashes(
+            Venta venta,
+            List<VentaArchivoDiseno> archivosAEliminar,
+            List<VentaImagenStorageService.StoredVentaUpload> storedUploads) {
+        Set<String> hashesActivos = venta.getArchivosDiseno().stream()
+                .filter(archivo -> !archivosAEliminar.contains(archivo))
+                .map(VentaArchivoDiseno::getHashSha256)
+                .filter(this::hasText)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+
+        for (VentaImagenStorageService.StoredVentaUpload storedUpload : storedUploads) {
+            if (!hasText(storedUpload.sha256Hash())) {
+                continue;
+            }
+
+            if (!hashesActivos.add(storedUpload.sha256Hash())) {
+                throw new ApiRequestException(
+                        HttpStatus.BAD_REQUEST,
+                        "IMAGEN_DUPLICADA",
+                        "La venta ya contiene una imagen identica a una de las seleccionadas.");
+            }
+        }
+    }
+
+    private List<String> extractStoredPathsFromUploads(List<VentaImagenStorageService.StoredVentaUpload> storedUploads) {
+        return storedUploads.stream()
+                .flatMap(upload -> java.util.stream.Stream.of(upload.storedImagePath(), upload.storedThumbnailPath()))
+                .filter(this::hasText)
+                .distinct()
+                .toList();
+    }
+
+    private List<String> extractStoredPathsFromEntities(List<VentaArchivoDiseno> archivos) {
+        return archivos.stream()
+                .flatMap(archivo -> java.util.stream.Stream.of(archivo.getRutaAlmacenamiento(), archivo.getRutaMiniatura()))
+                .filter(this::hasText)
+                .distinct()
+                .toList();
     }
 
     private void normalizeArchivoOrder(Venta venta) {
@@ -363,7 +413,8 @@ public class VentaService {
     private void syncLegacyImageUrl(Venta venta, boolean fileStateChanged) {
         if (!venta.getArchivosDiseno().isEmpty()) {
             VentaArchivoDiseno primaryFile = venta.getArchivosDiseno().stream()
-                    .sorted(Comparator.comparing(VentaArchivoDiseno::getOrdenVisual).thenComparing(VentaArchivoDiseno::getId, Comparator.nullsLast(Comparator.naturalOrder())))
+                    .sorted(Comparator.comparing(VentaArchivoDiseno::getOrdenVisual)
+                            .thenComparing(VentaArchivoDiseno::getId, Comparator.nullsLast(Comparator.naturalOrder())))
                     .findFirst()
                     .orElse(null);
             venta.setImagenDisenoUrl(primaryFile == null ? null : primaryFile.getRutaAlmacenamiento());
@@ -465,6 +516,11 @@ public class VentaService {
                 .orElseThrow(() -> new ResourceNotFoundException("Venta no encontrada: " + id));
     }
 
+    private VentaArchivoDiseno obtenerArchivoEntidad(Long ventaId, Long archivoId) {
+        return ventaArchivoDisenoRepository.findByIdAndVentaId(archivoId, ventaId)
+                .orElseThrow(() -> new ResourceNotFoundException("Archivo de venta no encontrado: " + archivoId));
+    }
+
     private VentaResponse toResponse(Venta venta) {
         List<VentaArchivoDisenoResponse> archivos = buildArchivosResponse(venta);
 
@@ -508,7 +564,8 @@ public class VentaService {
 
     private List<VentaArchivoDisenoResponse> buildArchivosResponse(Venta venta) {
         List<VentaArchivoDiseno> archivosPersistidos = venta.getArchivosDiseno().stream()
-                .sorted(Comparator.comparing(VentaArchivoDiseno::getOrdenVisual).thenComparing(VentaArchivoDiseno::getId, Comparator.nullsLast(Comparator.naturalOrder())))
+                .sorted(Comparator.comparing(VentaArchivoDiseno::getOrdenVisual)
+                        .thenComparing(VentaArchivoDiseno::getId, Comparator.nullsLast(Comparator.naturalOrder())))
                 .toList();
 
         if (!archivosPersistidos.isEmpty()) {
@@ -517,9 +574,16 @@ public class VentaService {
                             archivo.getId(),
                             archivo.getNombreOriginal(),
                             archivo.getTipoMime(),
-                            archivo.getTamanoBytes(),
+                            archivo.getFormatoFinal(),
+                            archivo.getTamanoOriginalBytes(),
+                            archivo.getTamanoOptimizadoBytes() != null ? archivo.getTamanoOptimizadoBytes() : archivo.getTamanoBytes(),
+                            archivo.getAnchoOriginal(),
+                            archivo.getAltoOriginal(),
+                            archivo.getAnchoOptimizado(),
+                            archivo.getAltoOptimizado(),
                             archivo.getOrdenVisual(),
                             archivo.getFechaRegistro(),
+                            "/api/ventas/" + venta.getId() + "/archivos/" + archivo.getId() + "/miniatura",
                             "/api/ventas/" + venta.getId() + "/archivos/" + archivo.getId(),
                             "/api/ventas/" + venta.getId() + "/archivos/" + archivo.getId() + "?download=true"))
                     .toList();
@@ -534,9 +598,16 @@ public class VentaService {
                 null,
                 fileName,
                 resolveMimeTypeFromPath(venta.getImagenDisenoUrl()),
+                resolveFormatFromPath(venta.getImagenDisenoUrl()),
                 0L,
+                0L,
+                null,
+                null,
+                null,
+                null,
                 0,
                 venta.getUpdatedAt(),
+                "/api/ventas/" + venta.getId() + "/archivo-diseno",
                 "/api/ventas/" + venta.getId() + "/archivo-diseno",
                 "/api/ventas/" + venta.getId() + "/archivo-diseno?download=true"));
     }
@@ -558,10 +629,21 @@ public class VentaService {
         if (normalizedPath.endsWith(".webp")) {
             return "image/webp";
         }
-        if (normalizedPath.endsWith(".pdf")) {
-            return "application/pdf";
-        }
         return "application/octet-stream";
+    }
+
+    private String resolveFormatFromPath(String storedPath) {
+        String normalizedPath = storedPath.toLowerCase();
+        if (normalizedPath.endsWith(".png")) {
+            return "PNG";
+        }
+        if (normalizedPath.endsWith(".jpg") || normalizedPath.endsWith(".jpeg")) {
+            return "JPEG";
+        }
+        if (normalizedPath.endsWith(".webp")) {
+            return "WEBP";
+        }
+        return "LEGACY";
     }
 
     private BigDecimal valorOZero(BigDecimal value, BigDecimal fallback) {

@@ -31,9 +31,11 @@ public class ApiExceptionHandler {
 
         return buildResponse(
                 HttpStatus.BAD_REQUEST,
+                "ERROR_VALIDACION",
                 "Error de validacion.",
                 request.getRequestURI(),
-                validationErrors);
+                validationErrors,
+                null);
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
@@ -41,8 +43,10 @@ public class ApiExceptionHandler {
             ConstraintViolationException exception, HttpServletRequest request) {
         return buildResponse(
                 HttpStatus.BAD_REQUEST,
+                "ERROR_VALIDACION",
                 exception.getMessage(),
                 request.getRequestURI(),
+                null,
                 null);
     }
 
@@ -51,8 +55,10 @@ public class ApiExceptionHandler {
             ResourceNotFoundException exception, HttpServletRequest request) {
         return buildResponse(
                 HttpStatus.NOT_FOUND,
+                "RECURSO_NO_ENCONTRADO",
                 exception.getMessage(),
                 request.getRequestURI(),
+                null,
                 null);
     }
 
@@ -61,9 +67,27 @@ public class ApiExceptionHandler {
             IllegalArgumentException exception, HttpServletRequest request) {
         return buildResponse(
                 HttpStatus.BAD_REQUEST,
+                "SOLICITUD_INVALIDA",
                 exception.getMessage(),
                 request.getRequestURI(),
+                null,
                 null);
+    }
+
+    @ExceptionHandler(ApiRequestException.class)
+    public ResponseEntity<ApiErrorResponse> handleApiRequestException(
+            ApiRequestException exception, HttpServletRequest request) {
+        if (exception.getStatus().is5xxServerError()) {
+            LOGGER.error("Error de negocio durante la solicitud {}", request.getRequestURI(), exception);
+        }
+
+        return buildResponse(
+                exception.getStatus(),
+                exception.getCode(),
+                exception.getMessage(),
+                request.getRequestURI(),
+                null,
+                exception.getDetails());
     }
 
     @ExceptionHandler(IllegalStateException.class)
@@ -72,8 +96,10 @@ public class ApiExceptionHandler {
         LOGGER.error("Error interno durante la solicitud {}", request.getRequestURI(), exception);
         return buildResponse(
                 HttpStatus.INTERNAL_SERVER_ERROR,
+                "ERROR_INTERNO",
                 exception.getMessage(),
                 request.getRequestURI(),
+                null,
                 null);
     }
 
@@ -81,9 +107,11 @@ public class ApiExceptionHandler {
     public ResponseEntity<ApiErrorResponse> handleMaxUploadSizeExceededException(
             MaxUploadSizeExceededException exception, HttpServletRequest request) {
         return buildResponse(
-                HttpStatus.BAD_REQUEST,
-                "El archivo supera el tamano maximo permitido.",
+                HttpStatus.PAYLOAD_TOO_LARGE,
+                "ARCHIVO_DEMASIADO_GRANDE",
+                "Una de las imagenes supera el tamano maximo permitido.",
                 request.getRequestURI(),
+                null,
                 null);
     }
 
@@ -93,21 +121,30 @@ public class ApiExceptionHandler {
         LOGGER.error("Error inesperado durante la solicitud {}", request.getRequestURI(), exception);
         return buildResponse(
                 HttpStatus.INTERNAL_SERVER_ERROR,
+                "ERROR_INTERNO",
                 "Ocurrio un error inesperado al procesar la solicitud.",
                 request.getRequestURI(),
+                null,
                 null);
     }
 
     private ResponseEntity<ApiErrorResponse> buildResponse(
-            HttpStatus status, String message, String path, Map<String, String> validationErrors) {
+            HttpStatus status,
+            String code,
+            String message,
+            String path,
+            Map<String, String> validationErrors,
+            Map<String, Object> details) {
         return ResponseEntity.status(status)
                 .body(
                         new ApiErrorResponse(
                                 LocalDateTime.now(),
                                 status.value(),
                                 status.getReasonPhrase(),
+                                code,
                                 message,
                                 path,
-                                validationErrors));
+                                validationErrors,
+                                details));
     }
 }

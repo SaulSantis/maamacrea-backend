@@ -3,8 +3,13 @@ package com.maamacrea.backend.ventas;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.maamacrea.backend.ApiRequestException;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import javax.imageio.ImageIO;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.mock.web.MockMultipartFile;
@@ -15,61 +20,83 @@ class VentaImagenStorageServiceTest {
     Path tempDir;
 
     @Test
-    void guardaArchivoPngDentroDeLaCarpetaDeLaVentaYDevuelveRutaRelativa() throws Exception {
-        VentaImagenStorageService storageService =
-                new VentaImagenStorageService(tempDir.resolve("uploads/ventas").toString(), 10);
+    void guardaImagenOptimizadaYMiniaturaDentroDeLaCarpetaDeLaVenta() throws Exception {
+        VentaImagenStorageService storageService = buildStorageService();
+
+        MockMultipartFile file =
+                new MockMultipartFile("file", "COJ-PER-001.png", "image/png", createValidPngBytes());
+
+        VentaImagenStorageService.StoredVentaUpload storedUpload = storageService.guardarArchivo(15L, file);
+        Path storedImage = tempDir.resolve(storedUpload.storedImagePath()).normalize();
+        Path storedThumbnail = tempDir.resolve(storedUpload.storedThumbnailPath()).normalize();
+
+        assertThat(storedUpload.storedImagePath()).startsWith("uploads/ventas/15/images/").endsWith(".png");
+        assertThat(storedUpload.storedThumbnailPath()).startsWith("uploads/ventas/15/thumbnails/").contains("-thumb");
+        assertThat(Files.exists(storedImage)).isTrue();
+        assertThat(Files.exists(storedThumbnail)).isTrue();
+        assertThat(storageService.cargarImagen(storedUpload.storedImagePath()).fileName())
+                .isEqualTo(storedImage.getFileName().toString());
+        assertThat(storageService.cargarMiniatura(storedUpload.storedThumbnailPath(), storedUpload.storedImagePath()).fileName())
+                .isEqualTo(storedThumbnail.getFileName().toString());
+    }
+
+    @Test
+    void rechazaExtensionNoPermitida() throws Exception {
+        VentaImagenStorageService storageService = buildStorageService();
+
+        MockMultipartFile file =
+                new MockMultipartFile("file", "COJ-PER-001.txt", "text/plain", createValidPngBytes());
+
+        assertThatThrownBy(() -> storageService.guardarArchivo(16L, file))
+                .isInstanceOf(ApiRequestException.class)
+                .hasMessage("El formato del archivo no es compatible.");
+    }
+
+    @Test
+    void rechazaImagenInvalidaAunqueTengaExtensionPermitida() {
+        VentaImagenStorageService storageService = buildStorageService();
 
         MockMultipartFile file =
                 new MockMultipartFile("file", "COJ-PER-001.png", "image/png", new byte[] {1, 2, 3});
 
-        VentaImagenStorageService.StoredVentaUpload storedUpload = storageService.guardarArchivo(15L, file);
-        Path storedFile = tempDir.resolve(storedUpload.storedPath()).normalize();
-
-        assertThat(storedUpload.storedPath()).startsWith("uploads/ventas/15/").endsWith(".png");
-        assertThat(Files.exists(storedFile)).isTrue();
-        assertThat(storageService.cargarImagen(storedUpload.storedPath()).fileName())
-                .isEqualTo(storedFile.getFileName().toString());
-    }
-
-    @Test
-    void rechazaExtensionNoPermitida() {
-        VentaImagenStorageService storageService =
-                new VentaImagenStorageService(tempDir.resolve("uploads/ventas").toString(), 10);
-
-        MockMultipartFile file =
-                new MockMultipartFile("file", "COJ-PER-001.txt", "text/plain", new byte[] {1, 2, 3});
-
-        assertThatThrownBy(() -> storageService.guardarArchivo(16L, file))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("El formato del archivo no es compatible.");
-    }
-
-    @Test
-    void rechazaArchivoConMimeInvalidoAunqueTengaExtensionPermitida() {
-        VentaImagenStorageService storageService =
-                new VentaImagenStorageService(tempDir.resolve("uploads/ventas").toString(), 10);
-
-        MockMultipartFile file =
-                new MockMultipartFile("file", "COJ-PER-001.png", "text/plain", new byte[] {1, 2, 3});
-
         assertThatThrownBy(() -> storageService.guardarArchivo(17L, file))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("El formato del archivo no es compatible.");
+                .isInstanceOf(ApiRequestException.class)
+                .hasMessage("El archivo seleccionado no contiene una imagen valida.");
     }
 
     @Test
-    void eliminaArchivoGuardadoCuandoLaVentaSeBorra() throws Exception {
-        VentaImagenStorageService storageService =
-                new VentaImagenStorageService(tempDir.resolve("uploads/ventas").toString(), 10);
+    void eliminaImagenYMiniaturaGuardadas() throws Exception {
+        VentaImagenStorageService storageService = buildStorageService();
 
         MockMultipartFile file =
-                new MockMultipartFile("file", "COJ-PER-001.pdf", "application/pdf", new byte[] {1, 2, 3});
+                new MockMultipartFile("file", "COJ-PER-001.png", "image/png", createValidPngBytes());
 
-        String storedPath = storageService.guardarArchivo(18L, file).storedPath();
-        Path storedFile = tempDir.resolve(storedPath).normalize();
+        VentaImagenStorageService.StoredVentaUpload storedUpload = storageService.guardarArchivo(18L, file);
+        Path storedImage = tempDir.resolve(storedUpload.storedImagePath()).normalize();
+        Path storedThumbnail = tempDir.resolve(storedUpload.storedThumbnailPath()).normalize();
 
-        storageService.eliminarImagen(storedPath);
+        storageService.eliminarImagen(storedUpload.storedImagePath());
+        storageService.eliminarImagen(storedUpload.storedThumbnailPath());
 
-        assertThat(Files.exists(storedFile)).isFalse();
+        assertThat(Files.exists(storedImage)).isFalse();
+        assertThat(Files.exists(storedThumbnail)).isFalse();
+    }
+
+    private VentaImagenStorageService buildStorageService() {
+        return new VentaImagenStorageService(
+                tempDir.resolve("uploads/ventas").toString(),
+                30,
+                2,
+                1600,
+                400,
+                0.82f,
+                40_000_000L);
+    }
+
+    private byte[] createValidPngBytes() throws IOException {
+        BufferedImage image = new BufferedImage(24, 24, BufferedImage.TYPE_INT_ARGB);
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        ImageIO.write(image, "png", outputStream);
+        return outputStream.toByteArray();
     }
 }
