@@ -69,14 +69,10 @@ public class InsumoService {
     }
 
     @Transactional
-    public InsumoResponse crear(InsumoRequest insumoRequest) {
+    public InsumoResponse crear(CreateInsumoRequest insumoRequest) {
         Insumo insumo = new Insumo();
         aplicarCamposBase(insumo, insumoRequest);
-        CompraInput compraInput = buildCompraInput(insumoRequest);
-        sincronizarResumenCompraInicial(insumo, compraInput);
-        Insumo guardado = insumoRepository.save(insumo);
-        registrarNuevaCompraInterna(guardado, compraInput);
-        return toResponse(insumoRepository.save(guardado));
+        return toResponse(insumoRepository.save(insumo));
     }
 
     @Transactional
@@ -163,16 +159,33 @@ public class InsumoService {
         }
     }
 
+    private void aplicarCamposBase(Insumo insumo, CreateInsumoRequest insumoRequest) {
+        aplicarIdentificacionBase(
+                insumo,
+                insumoRequest.codigoProducto(),
+                insumoRequest.nombre(),
+                insumoRequest.categoria());
+    }
+
     private void aplicarCamposBase(Insumo insumo, InsumoRequest insumoRequest) {
-        InsumoCategoria categoria = InsumoCategoria.fromCodigo(insumoRequest.categoria());
-        String codigoProducto = normalizarCodigoProducto(insumoRequest.codigoProducto());
+        aplicarIdentificacionBase(
+                insumo,
+                insumoRequest.codigoProducto(),
+                insumoRequest.nombre(),
+                insumoRequest.categoria());
+        insumo.setProveedor(normalizarTexto(insumoRequest.proveedor()));
+    }
+
+    private void aplicarIdentificacionBase(
+            Insumo insumo, String codigoProductoRaw, String nombreRaw, String categoriaRaw) {
+        InsumoCategoria categoria = InsumoCategoria.fromCodigo(categoriaRaw);
+        String codigoProducto = normalizarCodigoProducto(codigoProductoRaw);
 
         validarCodigoProductoDisponible(codigoProducto, insumo.getId());
 
         insumo.setCodigoProducto(codigoProducto);
-        insumo.setNombre(insumoRequest.nombre().trim());
+        insumo.setNombre(nombreRaw.trim());
         insumo.setCategoria(categoria.getCodigo());
-        insumo.setProveedor(normalizarTexto(insumoRequest.proveedor()));
     }
 
     private InsumoCompra registrarNuevaCompraInterna(Insumo insumo, CompraInput compraInput) {
@@ -246,14 +259,6 @@ public class InsumoService {
         insumo.setNumeroDocumento(compra.getNumeroDocumento());
         insumo.setDocumentoUrl(compra.getDocumentoUrl());
         insumo.setNotas(compra.getObservacion());
-    }
-
-    private void sincronizarResumenCompraInicial(Insumo insumo, CompraInput compraInput) {
-        validarCompraInput(compraInput);
-
-        InsumoCompra compraTemporal = new InsumoCompra();
-        aplicarCompraInput(compraTemporal, compraInput);
-        sincronizarResumenCompra(insumo, compraTemporal);
     }
 
     private CompraInput buildCompraInput(InsumoRequest insumoRequest) {

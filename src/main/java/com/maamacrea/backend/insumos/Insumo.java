@@ -38,10 +38,10 @@ public class Insumo {
     @Column(nullable = false, length = 80)
     private String categoria;
 
-    @Column(name = "unidad_medida", nullable = false, length = 40)
+    @Column(name = "unidad_medida", length = 40)
     private String unidadMedida;
 
-    @Column(name = "cantidad_comprada", nullable = false, precision = 12, scale = 3)
+    @Column(name = "cantidad_comprada", precision = 12, scale = 3)
     private BigDecimal cantidadComprada;
 
     @Column(name = "cantidad_ml_comprados", precision = 12, scale = 4)
@@ -74,10 +74,10 @@ public class Insumo {
     @Column(precision = 12, scale = 2)
     private BigDecimal iva;
 
-    @Column(name = "precio_compra_total", nullable = false, precision = 12, scale = 2)
+    @Column(name = "precio_compra_total", precision = 12, scale = 2)
     private BigDecimal precioCompraTotal;
 
-    @Column(name = "costo_unitario", nullable = false, precision = 12, scale = 4)
+    @Column(name = "costo_unitario", precision = 12, scale = 4)
     private BigDecimal costoUnitario;
 
     @Column(length = 120)

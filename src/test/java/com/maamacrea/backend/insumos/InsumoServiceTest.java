@@ -19,7 +19,6 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -48,9 +47,7 @@ class InsumoServiceTest {
     private InsumoService insumoService;
 
     @Test
-    void creaInsumoGenerandoCompraInicialVigente() {
-        AtomicReference<InsumoCompra> compraGuardada = new AtomicReference<>();
-
+    void creaInsumoBaseSinCompraInicial() {
         when(insumoRepository.existsByCodigoProductoIgnoreCase("ALG-001")).thenReturn(false);
         when(insumoRepository.save(any(Insumo.class))).thenAnswer(invocation -> {
             Insumo insumo = invocation.getArgument(0);
@@ -59,49 +56,20 @@ class InsumoServiceTest {
             }
             return insumo;
         });
-        when(insumoCompraRepository.save(any(InsumoCompra.class))).thenAnswer(invocation -> {
-            InsumoCompra compra = invocation.getArgument(0);
-            if (compra.getId() == null) {
-                compra.setId(10L);
-            }
-            compraGuardada.set(compra);
-            return compra;
-        });
-        when(insumoCompraRepository.findFirstByInsumoIdAndVigenteTrueOrderByFechaCompraDescCreatedAtDescIdDesc(1L))
-                .thenAnswer(invocation -> Optional.ofNullable(compraGuardada.get()));
         when(insumoCompraRepository.findByInsumoIdOrderByFechaCompraDescCreatedAtDescIdDesc(1L))
-                .thenAnswer(invocation -> compraGuardada.get() == null ? List.of() : List.of(compraGuardada.get()));
+                .thenReturn(List.of());
 
-        InsumoResponse response = insumoService.crear(new InsumoRequest(
+        InsumoResponse response = insumoService.crear(new CreateInsumoRequest(
                 "alg-001",
                 "Algodon sintetico",
-                "MATERIALES_TEXTILES",
-                "kg",
-                new BigDecimal("3"),
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                new BigDecimal("1680"),
-                new BigDecimal("320"),
-                new BigDecimal("2000"),
-                "Proveedor Base",
-                LocalDate.of(2026, 7, 8),
-                "FACTURA",
-                "F-001",
-                null,
-                "Compra inicial"));
+                "MATERIALES_TEXTILES"));
 
-        ArgumentCaptor<InsumoCompra> captor = ArgumentCaptor.forClass(InsumoCompra.class);
-        verify(insumoCompraRepository).save(captor.capture());
-
-        assertThat(captor.getValue().isVigente()).isTrue();
-        assertThat(captor.getValue().getPrecioUnitario()).isEqualByComparingTo("666.6667");
-        assertThat(response.compraVigenteId()).isEqualTo(10L);
-        assertThat(response.totalCompras()).isEqualTo(1);
+        verify(insumoCompraRepository, never()).save(any(InsumoCompra.class));
+        assertThat(response.codigoProducto()).isEqualTo("ALG-001");
+        assertThat(response.nombre()).isEqualTo("Algodon sintetico");
+        assertThat(response.compraVigenteId()).isNull();
+        assertThat(response.totalCompras()).isEqualTo(0);
+        assertThat(response.precioCompraTotal()).isNull();
     }
 
     @Test
@@ -173,17 +141,17 @@ class InsumoServiceTest {
     }
 
     @Test
-    void guardaCantidadMlCompradosEnInsumoDeTinta() {
+    void registraCompraDeTintaYGuardaCantidadMlComprados() {
+        Insumo insumo = new Insumo();
+        insumo.setId(1L);
+        insumo.setCodigoProducto("T49M1");
+        insumo.setNombre("Tinta Negra Sublimacion Epson");
+        insumo.setCategoria("SUBLIMACION");
+
         AtomicReference<InsumoCompra> compraGuardada = new AtomicReference<>();
 
-        when(insumoRepository.existsByCodigoProductoIgnoreCase("T49M1")).thenReturn(false);
-        when(insumoRepository.save(any(Insumo.class))).thenAnswer(invocation -> {
-            Insumo insumo = invocation.getArgument(0);
-            if (insumo.getId() == null) {
-                insumo.setId(1L);
-            }
-            return insumo;
-        });
+        when(insumoRepository.findById(1L)).thenReturn(Optional.of(insumo));
+        when(insumoRepository.save(any(Insumo.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(insumoCompraRepository.save(any(InsumoCompra.class))).thenAnswer(invocation -> {
             InsumoCompra compra = invocation.getArgument(0);
             if (compra.getId() == null) {
@@ -192,29 +160,20 @@ class InsumoServiceTest {
             compraGuardada.set(compra);
             return compra;
         });
-        when(insumoCompraRepository.findFirstByInsumoIdAndVigenteTrueOrderByFechaCompraDescCreatedAtDescIdDesc(1L))
-                .thenAnswer(invocation -> Optional.ofNullable(compraGuardada.get()));
-        when(insumoCompraRepository.findByInsumoIdOrderByFechaCompraDescCreatedAtDescIdDesc(1L))
-                .thenAnswer(invocation -> compraGuardada.get() == null ? List.of() : List.of(compraGuardada.get()));
-
-        InsumoResponse response = insumoService.crear(new InsumoRequest(
-                "T49M1",
-                "Tinta Negra Sublimacion Epson",
-                "SUBLIMACION",
-                "ml",
+        InsumoCompraResponse response = insumoService.registrarCompra(1L, new InsumoCompraRequest(
+                LocalDate.of(2026, 7, 8),
                 new BigDecimal("1"),
                 new BigDecimal("140"),
                 null,
                 null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
+                "ml",
                 new BigDecimal("19990"),
-                "Proveedor Tinta",
-                LocalDate.of(2026, 7, 8),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
                 "FACTURA",
                 "F-100",
                 null,
@@ -226,27 +185,28 @@ class InsumoServiceTest {
     }
 
     @Test
-    void guardaContenidoDeConoConConversionAYCostoPorMetro() {
-        AtomicReference<Insumo> primerInsumoGuardado = new AtomicReference<>();
+    void registraCompraDeConoConConversionAYCostoPorMetro() {
+        Insumo insumo = new Insumo();
+        insumo.setId(1L);
+        insumo.setCodigoProducto("CON-HIL-BLA-001");
+        insumo.setNombre("Cono Hilo Blanco");
+        insumo.setCategoria("COSTURA_Y_CONFECCION");
+
+        AtomicReference<Insumo> insumoActualizado = new AtomicReference<>();
         AtomicReference<InsumoCompra> compraGuardada = new AtomicReference<>();
 
-        when(insumoRepository.existsByCodigoProductoIgnoreCase("CON-HIL-BLA-001")).thenReturn(false);
+        when(insumoRepository.findById(1L)).thenReturn(Optional.of(insumo));
         when(insumoRepository.save(any(Insumo.class))).thenAnswer(invocation -> {
-            Insumo insumo = invocation.getArgument(0);
-            if (primerInsumoGuardado.get() == null) {
-                Insumo snapshot = new Insumo();
-                snapshot.setCantidadComprada(insumo.getCantidadComprada());
-                snapshot.setContenidoPorUnidad(insumo.getContenidoPorUnidad());
-                snapshot.setUnidadContenido(insumo.getUnidadContenido());
-                snapshot.setContenidoTotalComprado(insumo.getContenidoTotalComprado());
-                snapshot.setPrecioCompraTotal(insumo.getPrecioCompraTotal());
-                snapshot.setCostoUnitario(insumo.getCostoUnitario());
-                primerInsumoGuardado.set(snapshot);
-            }
-            if (insumo.getId() == null) {
-                insumo.setId(1L);
-            }
-            return insumo;
+            Insumo entidad = invocation.getArgument(0);
+            Insumo snapshot = new Insumo();
+            snapshot.setCantidadComprada(entidad.getCantidadComprada());
+            snapshot.setContenidoPorUnidad(entidad.getContenidoPorUnidad());
+            snapshot.setUnidadContenido(entidad.getUnidadContenido());
+            snapshot.setContenidoTotalComprado(entidad.getContenidoTotalComprado());
+            snapshot.setPrecioCompraTotal(entidad.getPrecioCompraTotal());
+            snapshot.setCostoUnitario(entidad.getCostoUnitario());
+            insumoActualizado.set(snapshot);
+            return entidad;
         });
         when(insumoCompraRepository.save(any(InsumoCompra.class))).thenAnswer(invocation -> {
             InsumoCompra compra = invocation.getArgument(0);
@@ -256,41 +216,32 @@ class InsumoServiceTest {
             compraGuardada.set(compra);
             return compra;
         });
-        when(insumoCompraRepository.findFirstByInsumoIdAndVigenteTrueOrderByFechaCompraDescCreatedAtDescIdDesc(1L))
-                .thenAnswer(invocation -> Optional.ofNullable(compraGuardada.get()));
-        when(insumoCompraRepository.findByInsumoIdOrderByFechaCompraDescCreatedAtDescIdDesc(1L))
-                .thenAnswer(invocation -> compraGuardada.get() == null ? List.of() : List.of(compraGuardada.get()));
-
-        InsumoResponse response = insumoService.crear(new InsumoRequest(
-                "CON-HIL-BLA-001",
-                "Cono Hilo Blanco",
-                "COSTURA_Y_CONFECCION",
-                "cono",
+        InsumoCompraResponse response = insumoService.registrarCompra(1L, new InsumoCompraRequest(
+                LocalDate.of(2026, 7, 9),
                 new BigDecimal("9"),
                 null,
                 new BigDecimal("2000"),
                 "yd",
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
+                "cono",
                 new BigDecimal("18000"),
-                "Proveedor Hilo",
-                LocalDate.of(2026, 7, 9),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
                 "FACTURA",
                 "F-300",
                 null,
                 "Hilo blanco"));
 
-        assertThat(primerInsumoGuardado.get()).isNotNull();
-        assertThat(primerInsumoGuardado.get().getCantidadComprada()).isEqualByComparingTo("9.000");
-        assertThat(primerInsumoGuardado.get().getContenidoPorUnidad()).isEqualByComparingTo("2000.0000");
-        assertThat(primerInsumoGuardado.get().getUnidadContenido()).isEqualTo("yd");
-        assertThat(primerInsumoGuardado.get().getContenidoTotalComprado()).isEqualByComparingTo("16459.2000");
-        assertThat(primerInsumoGuardado.get().getPrecioCompraTotal()).isEqualByComparingTo("18000.00");
-        assertThat(primerInsumoGuardado.get().getCostoUnitario()).isEqualByComparingTo("1.0936");
+        assertThat(insumoActualizado.get()).isNotNull();
+        assertThat(insumoActualizado.get().getCantidadComprada()).isEqualByComparingTo("9.000");
+        assertThat(insumoActualizado.get().getContenidoPorUnidad()).isEqualByComparingTo("2000.0000");
+        assertThat(insumoActualizado.get().getUnidadContenido()).isEqualTo("yd");
+        assertThat(insumoActualizado.get().getContenidoTotalComprado()).isEqualByComparingTo("16459.2000");
+        assertThat(insumoActualizado.get().getPrecioCompraTotal()).isEqualByComparingTo("18000.00");
+        assertThat(insumoActualizado.get().getCostoUnitario()).isEqualByComparingTo("1.0936");
         assertThat(response.contenidoPorUnidad()).isEqualByComparingTo("2000.0000");
         assertThat(response.unidadContenido()).isEqualTo("yd");
         assertThat(response.contenidoTotalComprado()).isEqualByComparingTo("16459.2000");

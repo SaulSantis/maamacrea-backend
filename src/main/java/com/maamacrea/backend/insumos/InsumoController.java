@@ -54,7 +54,7 @@ public class InsumoController {
     }
 
     @PostMapping
-    public ResponseEntity<InsumoResponse> crear(@Valid @RequestBody InsumoRequest insumoRequest) {
+    public ResponseEntity<InsumoResponse> crear(@Valid @RequestBody CreateInsumoRequest insumoRequest) {
         InsumoResponse creado = insumoService.crear(insumoRequest);
         return ResponseEntity.status(HttpStatus.CREATED).body(creado);
     }
