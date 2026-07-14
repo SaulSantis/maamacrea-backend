@@ -9,5 +9,7 @@ public interface ProductoInsumoRepository extends JpaRepository<ProductoInsumo, 
 
     List<ProductoInsumo> findByProductoIdOrderByIdAsc(Long productoId);
 
+    boolean existsByInsumoId(Long insumoId);
+
     void deleteByProductoId(Long productoId);
 }

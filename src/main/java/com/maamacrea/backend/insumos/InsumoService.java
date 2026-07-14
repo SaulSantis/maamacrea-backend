@@ -1,6 +1,8 @@
 package com.maamacrea.backend.insumos;
 
+import com.maamacrea.backend.ApiRequestException;
 import com.maamacrea.backend.ResourceNotFoundException;
+import com.maamacrea.backend.productos.ProductoInsumoRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -8,6 +10,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -19,14 +23,17 @@ public class InsumoService {
 
     private final InsumoRepository insumoRepository;
     private final InsumoCompraRepository insumoCompraRepository;
+    private final ProductoInsumoRepository productoInsumoRepository;
     private final InsumoDocumentoStorageService insumoDocumentoStorageService;
 
     public InsumoService(
             InsumoRepository insumoRepository,
             InsumoCompraRepository insumoCompraRepository,
+            ProductoInsumoRepository productoInsumoRepository,
             InsumoDocumentoStorageService insumoDocumentoStorageService) {
         this.insumoRepository = insumoRepository;
         this.insumoCompraRepository = insumoCompraRepository;
+        this.productoInsumoRepository = productoInsumoRepository;
         this.insumoDocumentoStorageService = insumoDocumentoStorageService;
     }
 
@@ -107,7 +114,16 @@ public class InsumoService {
     @Transactional
     public void eliminar(Long id) {
         Insumo insumo = obtenerEntidad(id);
-        insumoRepository.delete(insumo);
+        if (productoInsumoRepository.existsByInsumoId(id)) {
+            throw buildInsumoConDependenciasException();
+        }
+
+        try {
+            insumoRepository.delete(insumo);
+            insumoRepository.flush();
+        } catch (DataIntegrityViolationException exception) {
+            throw buildInsumoConDependenciasException();
+        }
     }
 
     private void aplicarCamposBase(Insumo insumo, InsumoRequest insumoRequest) {
@@ -447,6 +463,13 @@ public class InsumoService {
         return insumoRepository
                 .findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Insumo no encontrado."));
+    }
+
+    private ApiRequestException buildInsumoConDependenciasException() {
+        return new ApiRequestException(
+                HttpStatus.CONFLICT,
+                "INSUMO_CON_DEPENDENCIAS",
+                "No se puede eliminar este insumo porque tiene movimientos o registros asociados. Puedes desactivarlo en lugar de eliminarlo.");
     }
 
     private String normalizarCodigoProducto(String codigoProducto) {

@@ -1,10 +1,14 @@
 package com.maamacrea.backend.insumos;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.maamacrea.backend.ApiRequestException;
+import com.maamacrea.backend.productos.ProductoInsumoRepository;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -16,6 +20,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
 
 @ExtendWith(MockitoExtension.class)
 class InsumoServiceTest {
@@ -25,6 +31,9 @@ class InsumoServiceTest {
 
     @Mock
     private InsumoCompraRepository insumoCompraRepository;
+
+    @Mock
+    private ProductoInsumoRepository productoInsumoRepository;
 
     @Mock
     private InsumoDocumentoStorageService insumoDocumentoStorageService;
@@ -280,5 +289,64 @@ class InsumoServiceTest {
         assertThat(response.unidadContenido()).isEqualTo("yd");
         assertThat(response.contenidoTotalComprado()).isEqualByComparingTo("16459.2000");
         assertThat(compraGuardada.get().getPrecioUnitario()).isEqualByComparingTo("1.0936");
+    }
+
+    @Test
+    void eliminaInsumoSinDependencias() {
+        Insumo insumo = new Insumo();
+        insumo.setId(34L);
+
+        when(insumoRepository.findById(34L)).thenReturn(Optional.of(insumo));
+        when(productoInsumoRepository.existsByInsumoId(34L)).thenReturn(false);
+
+        insumoService.eliminar(34L);
+
+        verify(insumoRepository).delete(insumo);
+        verify(insumoRepository).flush();
+    }
+
+    @Test
+    void rechazaEliminacionCuandoExisteRelacionConProductos() {
+        Insumo insumo = new Insumo();
+        insumo.setId(34L);
+
+        when(insumoRepository.findById(34L)).thenReturn(Optional.of(insumo));
+        when(productoInsumoRepository.existsByInsumoId(34L)).thenReturn(true);
+
+        assertThatThrownBy(() -> insumoService.eliminar(34L))
+                .isInstanceOf(ApiRequestException.class)
+                .hasMessage("No se puede eliminar este insumo porque tiene movimientos o registros asociados. Puedes desactivarlo en lugar de eliminarlo.")
+                .satisfies(exception -> {
+                    ApiRequestException apiException = (ApiRequestException) exception;
+                    assertThat(apiException.getStatus()).isEqualTo(HttpStatus.CONFLICT);
+                    assertThat(apiException.getCode()).isEqualTo("INSUMO_CON_DEPENDENCIAS");
+                });
+
+        verify(insumoRepository, never()).delete(any(Insumo.class));
+        verify(insumoRepository, never()).flush();
+    }
+
+    @Test
+    void transformaViolacionDeIntegridadEnConflictoControlado() {
+        Insumo insumo = new Insumo();
+        insumo.setId(34L);
+
+        when(insumoRepository.findById(34L)).thenReturn(Optional.of(insumo));
+        when(productoInsumoRepository.existsByInsumoId(34L)).thenReturn(false);
+        org.mockito.Mockito.doThrow(new DataIntegrityViolationException("fk_producto_insumos_insumo"))
+                .when(insumoRepository)
+                .flush();
+
+        assertThatThrownBy(() -> insumoService.eliminar(34L))
+                .isInstanceOf(ApiRequestException.class)
+                .hasMessage("No se puede eliminar este insumo porque tiene movimientos o registros asociados. Puedes desactivarlo en lugar de eliminarlo.")
+                .satisfies(exception -> {
+                    ApiRequestException apiException = (ApiRequestException) exception;
+                    assertThat(apiException.getStatus()).isEqualTo(HttpStatus.CONFLICT);
+                    assertThat(apiException.getCode()).isEqualTo("INSUMO_CON_DEPENDENCIAS");
+                });
+
+        verify(insumoRepository).delete(insumo);
+        verify(insumoRepository).flush();
     }
 }
