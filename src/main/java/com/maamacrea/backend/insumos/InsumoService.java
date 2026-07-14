@@ -2,12 +2,15 @@ package com.maamacrea.backend.insumos;
 
 import com.maamacrea.backend.ApiRequestException;
 import com.maamacrea.backend.ResourceNotFoundException;
+import com.maamacrea.backend.productos.ProductoInsumo;
 import com.maamacrea.backend.productos.ProductoInsumoRepository;
+import com.maamacrea.backend.productos.ProductoService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -24,16 +27,19 @@ public class InsumoService {
     private final InsumoRepository insumoRepository;
     private final InsumoCompraRepository insumoCompraRepository;
     private final ProductoInsumoRepository productoInsumoRepository;
+    private final ProductoService productoService;
     private final InsumoDocumentoStorageService insumoDocumentoStorageService;
 
     public InsumoService(
             InsumoRepository insumoRepository,
             InsumoCompraRepository insumoCompraRepository,
             ProductoInsumoRepository productoInsumoRepository,
+            ProductoService productoService,
             InsumoDocumentoStorageService insumoDocumentoStorageService) {
         this.insumoRepository = insumoRepository;
         this.insumoCompraRepository = insumoCompraRepository;
         this.productoInsumoRepository = productoInsumoRepository;
+        this.productoService = productoService;
         this.insumoDocumentoStorageService = insumoDocumentoStorageService;
     }
 
@@ -55,6 +61,11 @@ public class InsumoService {
         InsumoCompra compra = obtenerCompraVigenteInterna(insumoId)
                 .orElseThrow(() -> new ResourceNotFoundException("No existe historial de compras para este insumo."));
         return toCompraResponse(compra);
+    }
+
+    public InsumoDependenciasResponse obtenerDependencias(Long id) {
+        obtenerEntidad(id);
+        return construirDependencias(id);
     }
 
     @Transactional
@@ -114,15 +125,41 @@ public class InsumoService {
     @Transactional
     public void eliminar(Long id) {
         Insumo insumo = obtenerEntidad(id);
-        if (productoInsumoRepository.existsByInsumoId(id)) {
-            throw buildInsumoConDependenciasException();
+        InsumoDependenciasResponse dependencias = construirDependencias(id);
+        if (dependencias.tieneDependencias()) {
+            throw buildInsumoConDependenciasException(dependencias);
         }
 
         try {
             insumoRepository.delete(insumo);
             insumoRepository.flush();
         } catch (DataIntegrityViolationException exception) {
-            throw buildInsumoConDependenciasException();
+            throw buildInsumoConDependenciasException(construirDependencias(id));
+        }
+    }
+
+    @Transactional
+    public void eliminarCompleto(Long id) {
+        Insumo insumo = obtenerEntidad(id);
+        List<Long> productoIdsAfectados = productoInsumoRepository.findByInsumoId(id).stream()
+                .map(ProductoInsumo::getProducto)
+                .filter(Objects::nonNull)
+                .map(producto -> producto.getId())
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+
+        productoInsumoRepository.deleteByInsumoId(id);
+
+        try {
+            insumoRepository.delete(insumo);
+            insumoRepository.flush();
+        } catch (DataIntegrityViolationException exception) {
+            throw buildInsumoDeleteCompleteConflictException();
+        }
+
+        for (Long productoId : productoIdsAfectados) {
+            productoService.calcularCostos(productoId);
         }
     }
 
@@ -465,11 +502,35 @@ public class InsumoService {
                 .orElseThrow(() -> new ResourceNotFoundException("Insumo no encontrado."));
     }
 
-    private ApiRequestException buildInsumoConDependenciasException() {
+    private InsumoDependenciasResponse construirDependencias(Long insumoId) {
+        long productosAsociados = productoInsumoRepository.countByInsumoId(insumoId);
+        long comprasRegistradas = insumoCompraRepository.countByInsumoId(insumoId);
+        boolean tieneDependencias = productosAsociados > 0;
+        return new InsumoDependenciasResponse(
+                insumoId,
+                tieneDependencias,
+                productosAsociados,
+                comprasRegistradas,
+                productosAsociados > 0);
+    }
+
+    private ApiRequestException buildInsumoConDependenciasException(InsumoDependenciasResponse dependencias) {
         return new ApiRequestException(
                 HttpStatus.CONFLICT,
                 "INSUMO_CON_DEPENDENCIAS",
-                "No se puede eliminar este insumo porque tiene movimientos o registros asociados. Puedes desactivarlo en lugar de eliminarlo.");
+                "No se puede eliminar este insumo porque tiene movimientos o registros asociados.",
+                Map.of(
+                        "insumoId", dependencias.insumoId(),
+                        "productosAsociados", dependencias.productosAsociados(),
+                        "comprasRegistradas", dependencias.comprasRegistradas(),
+                        "impactaCosteo", dependencias.impactaCosteo()));
+    }
+
+    private ApiRequestException buildInsumoDeleteCompleteConflictException() {
+        return new ApiRequestException(
+                HttpStatus.CONFLICT,
+                "INSUMO_ELIMINACION_COMPLETA_FALLIDA",
+                "No se pudo eliminar completamente el insumo porque existen registros asociados no contemplados.");
     }
 
     private String normalizarCodigoProducto(String codigoProducto) {

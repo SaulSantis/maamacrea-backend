@@ -8,7 +8,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.maamacrea.backend.ApiRequestException;
+import com.maamacrea.backend.productos.Producto;
 import com.maamacrea.backend.productos.ProductoInsumoRepository;
+import com.maamacrea.backend.productos.ProductoService;
+import com.maamacrea.backend.productos.ProductoInsumo;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -34,6 +37,9 @@ class InsumoServiceTest {
 
     @Mock
     private ProductoInsumoRepository productoInsumoRepository;
+
+    @Mock
+    private ProductoService productoService;
 
     @Mock
     private InsumoDocumentoStorageService insumoDocumentoStorageService;
@@ -297,7 +303,7 @@ class InsumoServiceTest {
         insumo.setId(34L);
 
         when(insumoRepository.findById(34L)).thenReturn(Optional.of(insumo));
-        when(productoInsumoRepository.existsByInsumoId(34L)).thenReturn(false);
+        when(productoInsumoRepository.countByInsumoId(34L)).thenReturn(0L);
 
         insumoService.eliminar(34L);
 
@@ -311,15 +317,18 @@ class InsumoServiceTest {
         insumo.setId(34L);
 
         when(insumoRepository.findById(34L)).thenReturn(Optional.of(insumo));
-        when(productoInsumoRepository.existsByInsumoId(34L)).thenReturn(true);
+        when(productoInsumoRepository.countByInsumoId(34L)).thenReturn(1L);
+        when(insumoCompraRepository.countByInsumoId(34L)).thenReturn(2L);
 
         assertThatThrownBy(() -> insumoService.eliminar(34L))
                 .isInstanceOf(ApiRequestException.class)
-                .hasMessage("No se puede eliminar este insumo porque tiene movimientos o registros asociados. Puedes desactivarlo en lugar de eliminarlo.")
+                .hasMessage("No se puede eliminar este insumo porque tiene movimientos o registros asociados.")
                 .satisfies(exception -> {
                     ApiRequestException apiException = (ApiRequestException) exception;
                     assertThat(apiException.getStatus()).isEqualTo(HttpStatus.CONFLICT);
                     assertThat(apiException.getCode()).isEqualTo("INSUMO_CON_DEPENDENCIAS");
+                    assertThat(apiException.getDetails()).containsEntry("productosAsociados", 1L);
+                    assertThat(apiException.getDetails()).containsEntry("comprasRegistradas", 2L);
                 });
 
         verify(insumoRepository, never()).delete(any(Insumo.class));
@@ -332,14 +341,14 @@ class InsumoServiceTest {
         insumo.setId(34L);
 
         when(insumoRepository.findById(34L)).thenReturn(Optional.of(insumo));
-        when(productoInsumoRepository.existsByInsumoId(34L)).thenReturn(false);
+        when(productoInsumoRepository.countByInsumoId(34L)).thenReturn(0L);
         org.mockito.Mockito.doThrow(new DataIntegrityViolationException("fk_producto_insumos_insumo"))
                 .when(insumoRepository)
                 .flush();
 
         assertThatThrownBy(() -> insumoService.eliminar(34L))
                 .isInstanceOf(ApiRequestException.class)
-                .hasMessage("No se puede eliminar este insumo porque tiene movimientos o registros asociados. Puedes desactivarlo en lugar de eliminarlo.")
+                .hasMessage("No se puede eliminar este insumo porque tiene movimientos o registros asociados.")
                 .satisfies(exception -> {
                     ApiRequestException apiException = (ApiRequestException) exception;
                     assertThat(apiException.getStatus()).isEqualTo(HttpStatus.CONFLICT);
@@ -348,5 +357,66 @@ class InsumoServiceTest {
 
         verify(insumoRepository).delete(insumo);
         verify(insumoRepository).flush();
+    }
+
+    @Test
+    void obtieneDependenciasExternasSinBloquearPorCompras() {
+        Insumo insumo = new Insumo();
+        insumo.setId(34L);
+
+        when(insumoRepository.findById(34L)).thenReturn(Optional.of(insumo));
+        when(productoInsumoRepository.countByInsumoId(34L)).thenReturn(0L);
+        when(insumoCompraRepository.countByInsumoId(34L)).thenReturn(3L);
+
+        InsumoDependenciasResponse dependencias = insumoService.obtenerDependencias(34L);
+
+        assertThat(dependencias.tieneDependencias()).isFalse();
+        assertThat(dependencias.productosAsociados()).isEqualTo(0L);
+        assertThat(dependencias.comprasRegistradas()).isEqualTo(3L);
+        assertThat(dependencias.impactaCosteo()).isFalse();
+    }
+
+    @Test
+    void eliminaCompletoYRecalculaProductosAfectados() {
+        Insumo insumo = new Insumo();
+        insumo.setId(34L);
+
+        Producto producto = new Producto();
+        producto.setId(99L);
+
+        ProductoInsumo relacion = new ProductoInsumo();
+        relacion.setProducto(producto);
+        relacion.setInsumo(insumo);
+
+        when(insumoRepository.findById(34L)).thenReturn(Optional.of(insumo));
+        when(productoInsumoRepository.findByInsumoId(34L)).thenReturn(List.of(relacion));
+
+        insumoService.eliminarCompleto(34L);
+
+        verify(productoInsumoRepository).deleteByInsumoId(34L);
+        verify(insumoRepository).delete(insumo);
+        verify(insumoRepository).flush();
+        verify(productoService).calcularCostos(99L);
+    }
+
+    @Test
+    void informaConflictoControladoSiFallaEliminacionCompleta() {
+        Insumo insumo = new Insumo();
+        insumo.setId(34L);
+
+        when(insumoRepository.findById(34L)).thenReturn(Optional.of(insumo));
+        when(productoInsumoRepository.findByInsumoId(34L)).thenReturn(List.of());
+        org.mockito.Mockito.doThrow(new DataIntegrityViolationException("fk_desconocida"))
+                .when(insumoRepository)
+                .flush();
+
+        assertThatThrownBy(() -> insumoService.eliminarCompleto(34L))
+                .isInstanceOf(ApiRequestException.class)
+                .hasMessage("No se pudo eliminar completamente el insumo porque existen registros asociados no contemplados.")
+                .satisfies(exception -> {
+                    ApiRequestException apiException = (ApiRequestException) exception;
+                    assertThat(apiException.getStatus()).isEqualTo(HttpStatus.CONFLICT);
+                    assertThat(apiException.getCode()).isEqualTo("INSUMO_ELIMINACION_COMPLETA_FALLIDA");
+                });
     }
 }

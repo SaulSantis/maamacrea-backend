@@ -48,6 +48,11 @@ public class InsumoController {
         return ResponseEntity.ok(insumoService.obtenerPrecioVigente(id));
     }
 
+    @GetMapping("/{id}/dependencias")
+    public ResponseEntity<InsumoDependenciasResponse> obtenerDependencias(@PathVariable Long id) {
+        return ResponseEntity.ok(insumoService.obtenerDependencias(id));
+    }
+
     @PostMapping
     public ResponseEntity<InsumoResponse> crear(@Valid @RequestBody InsumoRequest insumoRequest) {
         InsumoResponse creado = insumoService.crear(insumoRequest);
@@ -76,6 +81,12 @@ public class InsumoController {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> eliminar(@PathVariable Long id) {
         insumoService.eliminar(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/{id}/completo")
+    public ResponseEntity<Void> eliminarCompleto(@PathVariable Long id) {
+        insumoService.eliminarCompleto(id);
         return ResponseEntity.noContent().build();
     }
 }
